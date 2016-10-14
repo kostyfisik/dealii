@@ -31,8 +31,9 @@
 #include <deal.II/dofs/dof_tools.h>
 
 #include <deal.II/fe/fe_nedelec.h>
-#include <deal.II/fe/fe_system.h>
 #include <deal.II/fe/fe_q.h>
+#include <deal.II/fe/fe_raviart_thomas.h>
+#include <deal.II/fe/fe_system.h>
 #include <deal.II/fe/fe_values.h>
 
 #include <deal.II/grid/grid_generator.h>
@@ -43,6 +44,8 @@
 #include <deal.II/grid/tria_boundary_lib.h>
 #include <deal.II/grid/tria_iterator.h>
 
+#include <deal.II/lac/block_sparse_matrix.h>
+#include <deal.II/lac/block_vector.h>
 #include <deal.II/lac/constraint_matrix.h>
 #include <deal.II/lac/dynamic_sparsity_pattern.h>
 #include <deal.II/lac/full_matrix.h>
@@ -60,9 +63,9 @@
 
 // The last step is as in all previous programs:
 namespace Step23 {
-using namespace dealii;
+ using namespace dealii;
 
-// @sect3{The <code>WaveEquation</code> class}
+// @sect3{The <code>MaxwellTD</code> class}
 
 // Next comes the declaration of the main class. It's public interface of
 // functions is like in most of the other tutorial programs. Worth
@@ -84,10 +87,11 @@ using namespace dealii;
 // Finally, the variable <code>theta</code> is used to indicate the
 // parameter $\theta$ that is used to define which time stepping scheme to
 // use, as explained in the introduction. The rest is self-explanatory.
-template <int dim> class WaveEquation {
+template <int dim>
+class MaxwellTD {
 public:
-  WaveEquation();
-  void run();
+  MaxwellTD (const unsigned int degree);
+  void run ();
 
 private:
   void setup_system();
@@ -99,9 +103,13 @@ private:
   FE_Q<dim> fe;
   DoFHandler<dim> dof_handler;
 
+  FESystem<dim> mt_fe;
+  DoFHandler<dim> mt_dof_handler;
+
   ConstraintMatrix constraints;
 
   SparsityPattern sparsity_pattern;
+  SparsityPattern mt_sparsity_pattern;
   SparseMatrix<double> mass_matrix;
   SparseMatrix<double> laplace_matrix;
   SparseMatrix<double> matrix_u;
@@ -111,12 +119,17 @@ private:
   Vector<double> old_solution_u, old_solution_v;
   Vector<double> system_rhs;
 
+  unsigned int p_degree;
+  unsigned int quad_degree;
+
+  int refine_num = 2;
   double time, time_step;
   unsigned int timestep_number;
   const double theta;
 };
 
-template <int dim> class InitialValuesU : public Function<dim> {
+template <int dim>
+class InitialValuesU : public Function<dim> {
 public:
   InitialValuesU() : Function<dim>() {}
 
@@ -124,7 +137,8 @@ public:
                        const unsigned int component = 0) const;
 };
 
-template <int dim> class InitialValuesV : public Function<dim> {
+template <int dim>
+class InitialValuesV : public Function<dim> {
 public:
   InitialValuesV() : Function<dim>() {}
 
@@ -225,16 +239,20 @@ double BoundaryValuesV<dim>::value(const Point<dim> &p,
 }
 
 template <int dim>
-WaveEquation<dim>::WaveEquation()
-    : fe(1), dof_handler(triangulation), time_step(1. / 64), theta(0.5) {}
+MaxwellTD<dim>::MaxwellTD(const unsigned int degree)
+  : fe(degree), mt_fe(FE_Nedelec<dim>(degree), 1, FE_RaviartThomas<dim>(degree), 1),dof_handler(triangulation), mt_dof_handler(triangulation), time_step(1. / 64), theta(0.5)
+{
+  p_degree = degree;
+  quad_degree = p_degree+2;
+}
 
-// @sect4{WaveEquation::setup_system}
+// @sect4{MaxwellTD::setup_system}
 
 // The next function is the one that sets up the mesh, DoFHandler, and
 // matrices and vectors at the beginning of the program, i.e. before the
 // first time step. The first few lines are pretty much standard if you've
 // read through the tutorial programs at least up to step-6:
-template <int dim> void WaveEquation<dim>::setup_system() {
+template <int dim> void MaxwellTD<dim>::setup_system() {
   Point<dim> left, right;
   int factor = 14;
   dwidth = 0.3;
@@ -250,7 +268,6 @@ template <int dim> void WaveEquation<dim>::setup_system() {
 
   GridGenerator::subdivided_hyper_rectangle(triangulation, repetitions, left,
                                             right);
-  int refine_num = 2;
   triangulation.refine_global(refine_num);
   time_step = dwidth / std::pow(2, refine_num + 1);
 
@@ -258,8 +275,14 @@ template <int dim> void WaveEquation<dim>::setup_system() {
             << std::endl;
 
   dof_handler.distribute_dofs(fe);
+  mt_dof_handler.distribute_dofs(mt_fe);
+
+  // std::vector<unsigned int> block_component (dim+1,0);
+  // block_component[dim] = 1;
+  // DoFRenumbering::component_wise (dof_handler, block_component);
 
   std::cout << "Number of degrees of freedom: " << dof_handler.n_dofs()
+            << " and " << mt_dof_handler.n_dofs()
             << std::endl
             << std::endl;
 
@@ -267,29 +290,10 @@ template <int dim> void WaveEquation<dim>::setup_system() {
   DoFTools::make_sparsity_pattern(dof_handler, dsp);
   sparsity_pattern.copy_from(dsp);
 
-  // Then comes a block where we have to initialize the 3 matrices we need
-  // in the course of the program: the mass matrix, the Laplace matrix, and
-  // the matrix $M+k^2\theta^2A$ used when solving for $U^n$ in each time
-  // step.
-  //
-  // When setting up these matrices, note that they all make use of the same
-  // sparsity pattern object. Finally, the reason why matrices and sparsity
-  // patterns are separate objects in deal.II (unlike in many other finite
-  // element or linear algebra classes) becomes clear: in a significant
-  // fraction of applications, one has to hold several matrices that happen
-  // to have the same sparsity pattern, and there is no reason for them not
-  // to share this information, rather than re-building and wasting memory
-  // on it several times.
-  //
-  // After initializing all of these matrices, we call library functions
-  // that build the Laplace and mass matrices. All they need is a DoFHandler
-  // object and a quadrature formula object that is to be used for numerical
-  // integration. Note that in many respects these functions are better than
-  // what we would usually do in application programs, for example because
-  // they automatically parallelize building the matrices if multiple
-  // processors are available in a machine. The matrices for solving linear
-  // systems will be filled in the run() method because we need to re-apply
-  // boundary conditions every time step.
+  DynamicSparsityPattern mt_dsp(mt_dof_handler.n_dofs(), mt_dof_handler.n_dofs());
+  DoFTools::make_sparsity_pattern(mt_dof_handler, mt_dsp);
+  mt_sparsity_pattern.copy_from(mt_dsp);
+
   mass_matrix.reinit(sparsity_pattern);
   laplace_matrix.reinit(sparsity_pattern);
   matrix_u.reinit(sparsity_pattern);
@@ -299,12 +303,6 @@ template <int dim> void WaveEquation<dim>::setup_system() {
   MatrixCreator::create_laplace_matrix(dof_handler, QGauss<dim>(3),
                                        laplace_matrix);
 
-  // The rest of the function is spent on setting vector sizes to the
-  // correct value. The final line closes the hanging node constraints
-  // object. Since we work on a uniformly refined mesh, no constraints exist
-  // or have been computed (i.e. there was no need to call
-  // DoFTools::make_hanging_node_constraints as in other programs), but we
-  // need a constraints object in one place further down below anyway.
   solution_u.reinit(dof_handler.n_dofs());
   solution_v.reinit(dof_handler.n_dofs());
   old_solution_u.reinit(dof_handler.n_dofs());
@@ -313,22 +311,8 @@ template <int dim> void WaveEquation<dim>::setup_system() {
 
   constraints.close();
 }
-
-// @sect4{WaveEquation::solve_u and WaveEquation::solve_v}
-
-// The next two functions deal with solving the linear systems associated
-// with the equations for $U^n$ and $V^n$. Both are not particularly
-// interesting as they pretty much follow the scheme used in all the
-// previous tutorial programs.
-//
-// One can make little experiments with preconditioners for the two matrices
-// we have to invert. As it turns out, however, for the matrices at hand
-// here, using Jacobi or SSOR preconditioners reduces the number of
-// iterations necessary to solve the linear system slightly, but due to the
-// cost of applying the preconditioner it is no win in terms of run-time. It
-// is not much of a loss either, but let's keep it simple and just do
-// without:
-template <int dim> void WaveEquation<dim>::solve_u() {
+  
+template <int dim> void MaxwellTD<dim>::solve_u() {
   SolverControl solver_control(1000, 1e-8 * system_rhs.l2_norm());
   SolverCG<> cg(solver_control);
 
@@ -337,8 +321,8 @@ template <int dim> void WaveEquation<dim>::solve_u() {
   std::cout << "   u-equation: " << solver_control.last_step()
             << " CG iterations." << std::endl;
 }
-
-template <int dim> void WaveEquation<dim>::solve_v() {
+  
+template <int dim> void MaxwellTD<dim>::solve_v() {
   SolverControl solver_control(1000, 1e-8 * system_rhs.l2_norm());
   SolverCG<> cg(solver_control);
 
@@ -348,14 +332,7 @@ template <int dim> void WaveEquation<dim>::solve_v() {
             << " CG iterations." << std::endl;
 }
 
-// @sect4{WaveEquation::output_results}
-
-// Likewise, the following function is pretty much what we've done
-// before. The only thing worth mentioning is how here we generate a string
-// representation of the time step number padded with leading zeros to 3
-// character length using the Utilities::int_to_string function's second
-// argument.
-template <int dim> void WaveEquation<dim>::output_results() const {
+template <int dim> void MaxwellTD<dim>::output_results() const {
   DataOut<dim> data_out;
 
   data_out.attach_dof_handler(dof_handler);
@@ -370,17 +347,7 @@ template <int dim> void WaveEquation<dim>::output_results() const {
   data_out.write_vtu(output);
 }
 
-// @sect4{WaveEquation::run}
-
-// The following is really the only interesting function of the program. It
-// contains the loop over all time steps, but before we get to that we have
-// to set up the grid, DoFHandler, and matrices. In addition, we have to
-// somehow get started with initial values. To this end, we use the
-// VectorTools::project function that takes an object that describes a
-// continuous function and computes the $L^2$ projection of this function
-// onto the finite element space described by the DoFHandler object. Can't
-// be any simpler than that:
-template <int dim> void WaveEquation<dim>::run() {
+template <int dim> void MaxwellTD<dim>::run() {
   setup_system();
 
   VectorTools::project(dof_handler, constraints, QGauss<dim>(3),
@@ -419,7 +386,7 @@ template <int dim> void WaveEquation<dim>::run() {
               << " amp =" << get_amplitude(time) << std::endl;
 
     mass_matrix.vmult(system_rhs, old_solution_u);
-
+    
     mass_matrix.vmult(tmp, old_solution_v);
     system_rhs.add(time_step, tmp);
 
@@ -524,9 +491,9 @@ int main() {
   try {
     using namespace dealii;
     using namespace Step23;
-
-    WaveEquation<2> wave_equation_solver;
-    wave_equation_solver.run();
+    int degree = 1;
+    MaxwellTD<2> maxwell_td_solver(degree);
+    maxwell_td_solver.run();
   } catch (std::exception &exc) {
     std::cerr << std::endl
               << std::endl
