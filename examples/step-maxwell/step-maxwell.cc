@@ -28,6 +28,7 @@
 
 #include <deal.II/dofs/dof_accessor.h>
 #include <deal.II/dofs/dof_handler.h>
+#include <deal.II/dofs/dof_renumbering.h>
 #include <deal.II/dofs/dof_tools.h>
 
 #include <deal.II/fe/fe_nedelec.h>
@@ -39,6 +40,7 @@
 #include <deal.II/grid/grid_generator.h>
 #include <deal.II/grid/grid_out.h>
 #include <deal.II/grid/grid_refinement.h>
+#include <deal.II/grid/grid_tools.h>
 #include <deal.II/grid/tria.h>
 #include <deal.II/grid/tria_accessor.h>
 #include <deal.II/grid/tria_boundary_lib.h>
@@ -55,6 +57,7 @@
 #include <deal.II/lac/vector.h>
 
 #include <deal.II/numerics/data_out.h>
+#include <deal.II/numerics/error_estimator.h>
 #include <deal.II/numerics/matrix_tools.h>
 #include <deal.II/numerics/vector_tools.h>
 
@@ -294,6 +297,10 @@ template <int dim> void MaxwellTD<dim>::setup_system() {
   DoFTools::make_sparsity_pattern(mt_dof_handler, mt_dsp);
   mt_sparsity_pattern.copy_from(mt_dsp);
 
+  std::vector<unsigned int> mt_block_component (2*dim,1);
+  for (int i = 0; i < dim; ++i) mt_block_component[i] = 0;
+  DoFRenumbering::component_wise (mt_dof_handler, mt_block_component);
+
   mass_matrix.reinit(sparsity_pattern);
   laplace_matrix.reinit(sparsity_pattern);
   matrix_u.reinit(sparsity_pattern);
@@ -349,7 +356,9 @@ template <int dim> void MaxwellTD<dim>::output_results() const {
 
 template <int dim> void MaxwellTD<dim>::run() {
   setup_system();
-
+  const FEValuesExtractors::Vector e_field (0);
+  const FEValuesExtractors::Vector b_field (dim);
+  
   VectorTools::project(dof_handler, constraints, QGauss<dim>(3),
                        InitialValuesU<dim>(), old_solution_u);
   VectorTools::project(dof_handler, constraints, QGauss<dim>(3),
@@ -380,8 +389,10 @@ template <int dim> void MaxwellTD<dim>::run() {
   Vector<double> tmp(solution_u.size());
   Vector<double> forcing_terms(solution_u.size());
 
-  for (timestep_number = 1, time = time_step; time <= 25;
-       time += time_step, ++timestep_number) {
+  // for (
+  timestep_number = 1, time = time_step;
+  // time <= 25; time += time_step, ++timestep_number)
+  {
     std::cout << "Time step " << timestep_number << " at t=" << time
               << " amp =" << get_amplitude(time) << std::endl;
 
