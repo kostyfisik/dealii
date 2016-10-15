@@ -1,4 +1,4 @@
-/* ---------------------------------------------------------------------
+  /* ---------------------------------------------------------------------
  *
  * Copyright (C) 2006 - 2016 by the deal.II authors
  *
@@ -103,8 +103,6 @@ private:
   void output_results() const;
 
   Triangulation<dim> triangulation;
-  FE_Q<dim> fe;
-  DoFHandler<dim> dof_handler;
 
   FESystem<dim> mt_fe;
   DoFHandler<dim> mt_dof_handler;
@@ -119,22 +117,17 @@ private:
   SparseMatrix<double> matrix_u;
   SparseMatrix<double> matrix_v;
 
-  SparseMatrix<double> mt_matrix_e;
-  SparseMatrix<double> mt_matrix_b;
-  SparseMatrix<double> mt_G;
-  SparseMatrix<double> mt_K;
-  SparseMatrix<double> mt_P;
-  SparseMatrix<double> mt_C;
-  SparseMatrix<double> mt_Kt;
-  SparseMatrix<double> mt_S;
-  SparseMatrix<double> mt_Q;
+  SparseMatrix<double> mt_matrix_e,  mt_matrix_b;
+  SparseMatrix<double> sm_G,  sm_K,  sm_P,  sm_C, sm_Kt, sm_S, sm_Q;
 
   Vector<double> solution_u, solution_v;
   Vector<double> old_solution_u, old_solution_v;
   Vector<double> system_rhs;
 
-  unsigned int p_degree;
-  unsigned int quad_degree;
+  Vector<double> mt_e_field, mt_e_field_old, mt_b_field, mt_b_field_old;
+  
+  
+  unsigned int p_degree, quad_degree;
 
   int refine_num = 2;
   double time, time_step;
@@ -157,6 +150,15 @@ FullMatrix<double> sigma_m (const Point<dim> &p) {
 }
 template <int dim>
 FullMatrix<double> sigma_e (const Point<dim> &p) {
+  FullMatrix<double>   sigma (dim,dim);
+  sigma = 0.0;
+  for (int i=0; i<dim; ++i){
+    sigma(i,i) = 1.0;
+  }
+  return sigma;
+}
+template <int dim>
+double sigma_e (const Point<dim> &p) {
   FullMatrix<double>   sigma (dim,dim);
   sigma = 0.0;
   for (int i=0; i<dim; ++i){
@@ -280,7 +282,7 @@ double BoundaryValuesV<dim>::value(const Point<dim> &p,
 
 template <int dim>
 MaxwellTD<dim>::MaxwellTD(const unsigned int degree)
-  : fe(degree), mt_fe(FE_Nedelec<dim>(degree), 1, FE_RaviartThomas<dim>(degree), 1),dof_handler(triangulation), mt_dof_handler(triangulation), time_step(1. / 64), theta(0.5)
+  : mt_fe(FE_Nedelec<dim>(degree), 1, FE_RaviartThomas<dim>(degree), 1), mt_dof_handler(triangulation), time_step(1. / 64), theta(0.5)
 {
   p_degree = degree;
   quad_degree = p_degree+2;
@@ -314,7 +316,7 @@ template <int dim> void MaxwellTD<dim>::setup_system() {
   std::cout << "Number of active cells: " << triangulation.n_active_cells()
             << std::endl;
 
-  dof_handler.distribute_dofs(fe);
+  // dof_handler.distribute_dofs(fe);
   mt_dof_handler.distribute_dofs(mt_fe);
 
   // solution.reinit (dof_handler.n_dofs());
@@ -327,14 +329,9 @@ template <int dim> void MaxwellTD<dim>::setup_system() {
 
   // constraints.close ();
 
-  std::cout << "Number of degrees of freedom: " << dof_handler.n_dofs()
-            << " and " << mt_dof_handler.n_dofs()
+  std::cout << "Number of degrees of freedom: " << mt_dof_handler.n_dofs()
             << std::endl
             << std::endl;
-
-  DynamicSparsityPattern dsp(dof_handler.n_dofs(), dof_handler.n_dofs());
-  DoFTools::make_sparsity_pattern(dof_handler, dsp);
-  sparsity_pattern.copy_from(dsp);
 
   DynamicSparsityPattern mt_dsp(mt_dof_handler.n_dofs(), mt_dof_handler.n_dofs());
   DoFTools::make_sparsity_pattern(mt_dof_handler, mt_dsp);
@@ -385,9 +382,9 @@ template <int dim> void MaxwellTD<dim>::solve_v() {
 template <int dim> void MaxwellTD<dim>::output_results() const {
   DataOut<dim> data_out;
 
-  data_out.attach_dof_handler(dof_handler);
-  data_out.add_data_vector(solution_u, "U");
-  data_out.add_data_vector(solution_v, "V");
+  data_out.attach_dof_handler(mt_dof_handler);
+  data_out.add_data_vector(mt_e_field, "E_field");
+  data_out.add_data_vector(mt_b_field, "B_field");
 
   data_out.build_patches();
 
@@ -402,10 +399,10 @@ template <int dim> void MaxwellTD<dim>::run() {
   const FEValuesExtractors::Vector e_field (0);
   const FEValuesExtractors::Vector b_field (dim);
   
-  VectorTools::project(dof_handler, constraints, QGauss<dim>(3),
-                       InitialValuesU<dim>(), old_solution_u);
-  VectorTools::project(dof_handler, constraints, QGauss<dim>(3),
-                       InitialValuesV<dim>(), old_solution_v);
+  // VectorTools::project(dof_handler, constraints, QGauss<dim>(3),
+  //                      InitialValuesU<dim>(), old_solution_u);
+  // VectorTools::project(dof_handler, constraints, QGauss<dim>(3),
+  //                      InitialValuesV<dim>(), old_solution_v);
 
   // The next thing is to loop over all the time steps until we reach the
   // end time ($T=5$ in this case). In each time step, we first have to
