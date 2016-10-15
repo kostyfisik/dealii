@@ -113,10 +113,21 @@ private:
 
   SparsityPattern sparsity_pattern;
   SparsityPattern mt_sparsity_pattern;
+
   SparseMatrix<double> mass_matrix;
   SparseMatrix<double> laplace_matrix;
   SparseMatrix<double> matrix_u;
   SparseMatrix<double> matrix_v;
+
+  SparseMatrix<double> mt_matrix_e;
+  SparseMatrix<double> mt_matrix_b;
+  SparseMatrix<double> mt_G;
+  SparseMatrix<double> mt_K;
+  SparseMatrix<double> mt_P;
+  SparseMatrix<double> mt_C;
+  SparseMatrix<double> mt_Kt;
+  SparseMatrix<double> mt_S;
+  SparseMatrix<double> mt_Q;
 
   Vector<double> solution_u, solution_v;
   Vector<double> old_solution_u, old_solution_v;
@@ -131,6 +142,32 @@ private:
   const double theta;
 };
 
+
+  // Set material parameters
+template <int dim> double mu_rev (const Point<dim> &p) {return 1.0;}
+template <int dim> double eps (const Point<dim> &p) {return 1.0;}
+template <int dim>
+FullMatrix<double> sigma_m (const Point<dim> &p) {
+  FullMatrix<double>   sigma (dim,dim);
+  sigma = 0.0;
+  for (int i=0; i<dim; ++i){
+    sigma(i,i) = 1.0;
+  }
+  return sigma;
+}
+template <int dim>
+FullMatrix<double> sigma_e (const Point<dim> &p) {
+  FullMatrix<double>   sigma (dim,dim);
+  sigma = 0.0;
+  for (int i=0; i<dim; ++i){
+    sigma(i,i) = 1.0;
+  }
+  return sigma;
+}
+
+
+
+  
 template <int dim>
 class InitialValuesU : public Function<dim> {
 public:
@@ -280,9 +317,15 @@ template <int dim> void MaxwellTD<dim>::setup_system() {
   dof_handler.distribute_dofs(fe);
   mt_dof_handler.distribute_dofs(mt_fe);
 
-  // std::vector<unsigned int> block_component (dim+1,0);
-  // block_component[dim] = 1;
-  // DoFRenumbering::component_wise (dof_handler, block_component);
+  // solution.reinit (dof_handler.n_dofs());
+  // system_rhs.reinit (dof_handler.n_dofs());
+  // constraints.clear ();
+  // DoFTools::make_hanging_node_constraints (dof_handler,
+  //                                          constraints);
+  // // FE_Nedelec boundary condition.
+  // VectorTools::project_boundary_values_curl_conforming(dof_handler, 0, ExactSolution<dim>(), 0, constraints);
+
+  // constraints.close ();
 
   std::cout << "Number of degrees of freedom: " << dof_handler.n_dofs()
             << " and " << mt_dof_handler.n_dofs()
