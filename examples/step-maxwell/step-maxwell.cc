@@ -109,23 +109,14 @@ private:
 
   ConstraintMatrix constraints;
 
-  SparsityPattern sparsity_pattern;
   SparsityPattern mt_sparsity_pattern;
-
-  SparseMatrix<double> mass_matrix;
-  SparseMatrix<double> laplace_matrix;
-  SparseMatrix<double> matrix_u;
-  SparseMatrix<double> matrix_v;
 
   SparseMatrix<double> mt_matrix_e,  mt_matrix_b;
   SparseMatrix<double> sm_G,  sm_K,  sm_P,  sm_C, sm_Kt, sm_S, sm_Q;
 
-  Vector<double> solution_u, solution_v;
-  Vector<double> old_solution_u, old_solution_v;
   Vector<double> system_rhs;
 
   Vector<double> mt_e_field, mt_e_field_old, mt_b_field, mt_b_field_old;
-  
   
   unsigned int p_degree, quad_degree;
 
