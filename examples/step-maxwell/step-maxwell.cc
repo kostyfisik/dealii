@@ -148,15 +148,7 @@ FullMatrix<double> sigma_e (const Point<dim> &p) {
   }
   return sigma;
 }
-template <int dim>
-double sigma_e (const Point<dim> &p) {
-  FullMatrix<double>   sigma (dim,dim);
-  sigma = 0.0;
-  for (int i=0; i<dim; ++i){
-    sigma(i,i) = 1.0;
-  }
-  return sigma;
-}
+
 
 
 
@@ -272,8 +264,11 @@ double BoundaryValuesV<dim>::value(const Point<dim> &p,
 }
 
 template <int dim>
-MaxwellTD<dim>::MaxwellTD(const unsigned int degree)
-  : mt_fe(FE_Nedelec<dim>(degree), 1, FE_RaviartThomas<dim>(degree), 1), mt_dof_handler(triangulation), time_step(1. / 64), theta(0.5)
+MaxwellTD<dim>::MaxwellTD(const unsigned int degree) :
+	mt_fe(FE_Nedelec<dim>(degree), 1, FE_RaviartThomas<dim>(degree), 1),
+	mt_dof_handler(triangulation),
+	time_step(1. / 64),
+	theta(0.5)
 {
   p_degree = degree;
   quad_degree = p_degree+2;
