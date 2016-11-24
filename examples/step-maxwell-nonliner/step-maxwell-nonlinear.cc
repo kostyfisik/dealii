@@ -16,6 +16,7 @@
  *
  * Author: Wolfgang Bangerth, Texas A&M University, 2006
  * Author: Konstantin Ladutenko, ITMO University, 2016
+ * Author: Hongfeng Ma, Laboratoire Hubert Curien / Universite de Lyon, 2016
  */
 
 // This is an attempt to convert step-23 into time-domain Maxwell solver.
@@ -102,24 +103,20 @@ private:
   void solve_v();
   void output_results() const;
 
-  Triangulation<dim> triangulation;
-
-  FESystem<dim> mt_fe;
-  DoFHandler<dim> mt_dof_handler;
+  Triangulation<dim>	triangulation;
+  FESystem<dim>			mt_fe;
+  DoFHandler<dim>		mt_dof_handler;
 
   ConstraintMatrix constraints;
 
-  SparsityPattern mt_sparsity_pattern;
+  SparsityPattern		mt_sparsity_pattern;
+  SparseMatrix<double>	mt_matrix_e,  mt_matrix_b;
+  SparseMatrix<double>	sm_G,  sm_K,  sm_P,  sm_C, sm_Kt, sm_S, sm_Q;
 
-  SparseMatrix<double> mt_matrix_e,  mt_matrix_b;
-  SparseMatrix<double> sm_G,  sm_K,  sm_P,  sm_C, sm_Kt, sm_S, sm_Q;
+  Vector<double>		mt_e_field, mt_e_field_old, mt_b_field, mt_b_field_old;
+  Vector<double>		system_rhs;
 
-  Vector<double> system_rhs;
-
-  Vector<double> mt_e_field, mt_e_field_old, mt_b_field, mt_b_field_old;
-  
   unsigned int p_degree, quad_degree;
-
   int refine_num = 2;
   double time, time_step;
   unsigned int timestep_number;
@@ -127,9 +124,10 @@ private:
 };
 
 
-  // Set material parameters
+  // Set material parameters, mu_rev, eps, sigma_m, sigma_e
 template <int dim> double mu_rev (const Point<dim> &p) {return 1.0;}
 template <int dim> double eps (const Point<dim> &p) {return 1.0;}
+
 template <int dim>
 FullMatrix<double> sigma_m (const Point<dim> &p) {
   FullMatrix<double>   sigma (dim,dim);
@@ -139,6 +137,7 @@ FullMatrix<double> sigma_m (const Point<dim> &p) {
   }
   return sigma;
 }
+
 template <int dim>
 FullMatrix<double> sigma_e (const Point<dim> &p) {
   FullMatrix<double>   sigma (dim,dim);
@@ -148,46 +147,35 @@ FullMatrix<double> sigma_e (const Point<dim> &p) {
   }
   return sigma;
 }
+
+	//define initial values of e and m  
 template <int dim>
-double sigma_e (const Point<dim> &p) {
-  FullMatrix<double>   sigma (dim,dim);
-  sigma = 0.0;
-  for (int i=0; i<dim; ++i){
-    sigma(i,i) = 1.0;
-  }
-  return sigma;
-}
-
-
-
-  
-template <int dim>
-class InitialValuesU : public Function<dim> {
+class InitialValuesE : public Function<dim> {
 public:
-  InitialValuesU() : Function<dim>() {}
+  InitialValuesE() : Function<dim>() {}
 
   virtual double value(const Point<dim> &p,
                        const unsigned int component = 0) const;
 };
 
 template <int dim>
-class InitialValuesV : public Function<dim> {
+class InitialValuesB : public Function<dim> {
 public:
-  InitialValuesV() : Function<dim>() {}
+  InitialValuesB() : Function<dim>() {}
 
   virtual double value(const Point<dim> &p,
                        const unsigned int component = 0) const;
 };
 
 template <int dim>
-double InitialValuesU<dim>::value(const Point<dim> & /*p*/,
+double InitialValuesE<dim>::value(const Point<dim> & /*p*/,
                                   const unsigned int component) const {
   Assert(component == 0, ExcInternalError());
   return 0;
 }
 
 template <int dim>
-double InitialValuesV<dim>::value(const Point<dim> & /*p*/,
+double InitialValuesB<dim>::value(const Point<dim> & /*p*/,
                                   const unsigned int component) const {
   Assert(component == 0, ExcInternalError());
   return 0;
@@ -195,7 +183,8 @@ double InitialValuesV<dim>::value(const Point<dim> & /*p*/,
 
 // Secondly, we have the right hand side forcing term. Boring as we are, we
 // choose zero here as well:
-template <int dim> class RightHandSide : public Function<dim> {
+template <int dim>
+class RightHandSide : public Function<dim> {
 public:
   RightHandSide() : Function<dim>() {}
 
@@ -212,23 +201,24 @@ double RightHandSide<dim>::value(const Point<dim> & /*p*/,
 
 // Finally, we have boundary values for $u$ and $v$. They are as described
 // in the introduction, one being the time derivative of the other:
-template <int dim> class BoundaryValuesU : public Function<dim> {
+template <int dim> class BoundaryValuesE : public Function<dim> {
 public:
-  BoundaryValuesU() : Function<dim>() {}
+  BoundaryValuesE() : Function<dim>() {}
 
   virtual double value(const Point<dim> &p,
                        const unsigned int component = 0) const;
 };
 
-template <int dim> class BoundaryValuesV : public Function<dim> {
+template <int dim> class BoundaryValuesB : public Function<dim> {
 public:
-  BoundaryValuesV() : Function<dim>() {}
+  BoundaryValuesB() : Function<dim>() {}
 
   virtual double value(const Point<dim> &p,
                        const unsigned int component = 0) const;
 };
-
+//-----------------------
 template <class T> inline T pow2(const T value) { return value * value; }
+
 double dwidth = 0.3;
 double get_amplitude(double time) {
   return 0.0 * time;
@@ -271,9 +261,14 @@ double BoundaryValuesV<dim>::value(const Point<dim> &p,
     return 0;
 }
 
+
+//constructor
 template <int dim>
-MaxwellTD<dim>::MaxwellTD(const unsigned int degree)
-  : mt_fe(FE_Nedelec<dim>(degree), 1, FE_RaviartThomas<dim>(degree), 1), mt_dof_handler(triangulation), time_step(1. / 64), theta(0.5)
+MaxwellTD<dim>::MaxwellTD(const unsigned int degree) :
+	mt_fe(FE_Nedelec<dim>(degree), 1, FE_RaviartThomas<dim>(degree), 1),
+	mt_dof_handler(triangulation),
+	time_step(1. / 64),
+	theta(0.5)
 {
   p_degree = degree;
   quad_degree = p_degree+2;
@@ -285,7 +280,8 @@ MaxwellTD<dim>::MaxwellTD(const unsigned int degree)
 // matrices and vectors at the beginning of the program, i.e. before the
 // first time step. The first few lines are pretty much standard if you've
 // read through the tutorial programs at least up to step-6:
-template <int dim> void MaxwellTD<dim>::setup_system() {
+template <int dim>
+void MaxwellTD<dim>::setup_system() {
   Point<dim> left, right;
   int factor = 14;
   dwidth = 0.3;
