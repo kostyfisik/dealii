@@ -115,11 +115,12 @@ namespace Step23
   class MaxwellTD
   {
   public:
-    MaxwellTD ();
+    MaxwellTD (const unsigned int degree);
     void run ();
 
   private:
     void setup_system ();
+	void assemble_matrix();
     void solve_b ();
     void solve_e ();
     void output_results () const;
@@ -140,6 +141,11 @@ namespace Step23
 
     double time, time_step;
     unsigned int timestep_number;
+
+	double mu_r=1;
+	double eps_r=1;
+	double sigma_e=0;
+	double sigma_m=0;
 //    const double theta;
   };
 
@@ -388,6 +394,58 @@ namespace Step23
     system_rhs.reinit (n_e);
 
   }
+
+  template <int dim>
+  void MaxwellTD::assemble_system ()
+  {
+	QGauss<dim> quadrature_formula(degree+2);
+	
+	FEValues<dim> fe_values(fe, quadrature_formula, 
+							update_values	| update_gradients | 
+							update_quadrature_points | update_JxW_values);
+
+	const unsigned int dofs_per_cell	= fe.dofs_per_cell;
+	const unsigned int n_q_points		= quadrature_formula.size();
+
+
+	
+	const FEValuesExtractors::Vector E_filed (0);
+	const FEValuesExtractors::Vector B_Field (dim);
+
+	typename DoFHandler<dim>::active_cell_iterator
+	cell = dof_handler.begin_active(),
+	endc = dof_handler.end();
+	for (; cell!=endc; ++cell)
+	{
+		fe_values.reinit(cell);
+		
+		for (unsigned int q=0; q<n_q_points;++q)
+		  for (unsigned int i=0; i<dofs_per_cell; ++i)
+		  {
+			const Tensor<1,dim> phi_i_E			= fe_values[E_field].value(i,q);
+			const Tensor<1,dim> curl_phi_i_E	= fe_values[E_field].curl(i,q);
+			const Tensor<1,dim> phi_i_B			= fe_values[B_field[.value(i,q);
+
+			  for (unsigned int j=0; j<dofs_per_cell; ++j)
+			  {
+				const Tensor<1,dim> phi_j_E			= fe_values[E_field].value(j,q);
+				const Tensor<1,dim> curl_phi_j_E	= fe_values[E_field].curl(j,q);
+				const Tensor<1,dim>	phi_j_B			= fe_values[B_field].value(j,q);
+
+				mt_G  (i,j) = 1.0 / mu_r * phi_i_B * phi_j_B;
+				mt_K  (i,j) = 1.0 / mu_r * curl_phi_i_E * phi_j_B;
+				mt_P  (i,j) = 1.0 / mu_r * sigma_m / mu_r * phi_i_B * phi_j_B;
+				mt_C  (i,j) = eps_r * phi_i_E * phi_j_E;
+				mt_Kt (i,j) = 1.0 / mu_r * curl_phi_i_E * phi_j_B;
+				mt_S  (i,j) = sigma_e * phi_i_E * phi_j_E;
+				mt_Q  (i,j) = phi_i_B * phi_j_E;
+			  }
+		  }
+	}
+  }
+
+		
+
 
 
   // @sect4{WaveEquation::solve_u and WaveEquation::solve_v}
