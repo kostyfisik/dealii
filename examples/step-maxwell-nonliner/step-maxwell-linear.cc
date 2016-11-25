@@ -46,6 +46,10 @@
 #include <deal.II/fe/fe_q.h>
 #include <deal.II/fe/fe_values.h>
 
+#include <deal.II/fe/fe_system.h>
+#include <deal.II/fe/fe_nedelec.h>
+#include <deal.II/fe/fe_raviart_thomas.h>
+
 #include <deal.II/numerics/data_out.h>
 
 #include <fstream>
@@ -125,6 +129,8 @@ namespace Step23
     void solve_e ();
     void output_results () const;
 
+	const unsigned int degree;
+
     Triangulation<dim>   triangulation;
     FESystem<dim>		 fe;
     DoFHandler<dim>      dof_handler;
@@ -137,7 +143,7 @@ namespace Step23
 
     Vector<double>       solution_e, solution_b;
     Vector<double>       old_solution_e, old_solution_b;
-    Vector<double>       system_rhs;
+    Vector<double>       system_rhd;
 
     double time, time_step;
     unsigned int timestep_number;
@@ -205,28 +211,6 @@ namespace Step23
 
 
 
-  // Secondly, we have the right hand side forcing term. Boring as we are, we
-  // choose zero here as well:
-  template <int dim>
-  class RightHandSide : public Function<dim>
-  {
-  public:
-    RightHandSide () : Function<dim>() {}
-
-    virtual double value (const Point<dim>   &p,
-                          const unsigned int  component = 0) const;
-  };
-
-
-
-  template <int dim>
-  double RightHandSide<dim>::value (const Point<dim>  &/*p*/,
-                                    const unsigned int component) const
-  {
-    Assert (component == 0, ExcInternalError());
-    return 0;
-  }
-
 
 
   // Finally, we have boundary values for $u$ and $v$. They are as described
@@ -280,14 +264,7 @@ namespace Step23
   {
     Assert (component == 0, ExcInternalError());
 
-    if ((this->get_time() <= 0.5) &&
-        (p[0] < 0) &&
-        (p[1] < 1./3) &&
-        (p[1] > -1./3))
-      return (std::cos (this->get_time() * 4 * numbers::PI) *
-              4 * numbers::PI);
-    else
-      return 0;
+    return 0;
   }
 
 
@@ -306,11 +283,13 @@ namespace Step23
   // time step, see the section on Courant, Friedrichs, and Lewy in the
   // introduction):
   template <int dim>
-  WaveEquation<dim>::WaveEquation () :
-    fe (FE_Nedelec<dim>, 1, FE_RaviartThomas<dim>, 1),
+  MaxwellTD<dim>::MaxwellTD (const unsigned int degree)
+	:
+	degree (degree),
+    fe (FE_Nedelec<dim>(degree), 1, FE_RaviartThomas<dim>(degree), 1),
     dof_handler (triangulation),
-    time_step (1./64),
-    theta (0.5)
+    time_step (1./64)
+	//theta (0.5)
   {}
 
 
@@ -321,7 +300,7 @@ namespace Step23
   // first time step. The first few lines are pretty much standard if you've
   // read through the tutorial programs at least up to step-6:
   template <int dim>
-  void WaveEquation<dim>::setup_system ()
+  void MaxwellTD<dim>::setup_system ()
   {
     GridGenerator::hyper_cube (triangulation, -1, 1);
     triangulation.refine_global (7);
@@ -463,7 +442,7 @@ namespace Step23
   // is not much of a loss either, but let's keep it simple and just do
   // without:
   template <int dim>
-  void WaveEquation<dim>::solve_b ()
+  void MaxwellTD<dim>::solve_b ()
   {
     SolverControl           solver_control (1000, 1e-8*system_rhs.l2_norm());
     SolverCG<>              cg (solver_control);
@@ -478,7 +457,7 @@ namespace Step23
 
 
   template <int dim>
-  void WaveEquation<dim>::solve_e ()
+  void MaxwellTD<dim>::solve_e ()
   {
     SolverControl           solver_control (1000, 1e-8*system_rhs.l2_norm());
     SolverCG<>              cg (solver_control);
@@ -501,7 +480,7 @@ namespace Step23
   // character length using the Utilities::int_to_string function's second
   // argument.
   template <int dim>
-  void WaveEquation<dim>::output_results () const
+  void MaxwellTD<dim>::output_results () const
   {
     DataOut<dim> data_out;
 
@@ -532,7 +511,7 @@ namespace Step23
   // onto the finite element space described by the DoFHandler object. Can't
   // be any simpler than that:
   template <int dim>
-  void WaveEquation<dim>::run ()
+  void MaxwellTD<dim>::run ()
   {
     setup_system();
 
@@ -594,13 +573,13 @@ namespace Step23
         // usually do. The result is then handed off to the solve_u()
         // function:
         {
-          BoundaryValuesU<dim> boundary_values_u_function;
-          boundary_values_u_function.set_time (time);
+          BoundaryValuesB<dim> boundary_values_b_function;
+          boundary_values_b_function.set_time (time);
 
           std::map<types::global_dof_index,double> boundary_values;
           VectorTools::interpolate_boundary_values (dof_handler,
                                                     0,
-                                                    boundary_values_u_function,
+                                                    ZeroFunction<dim>,
                                                     boundary_values);
 
           // The matrix for solve_u() is the same in every time steps, so one
@@ -617,8 +596,8 @@ namespace Step23
 
 
           MatrixTools::apply_boundary_values (boundary_values,
-                                              matrix_u,
-                                              solution_u,
+                                              matrix_b,
+                                              solution_b,
                                               system_rhs);
         }
         solve_b ();
@@ -645,13 +624,13 @@ namespace Step23
 
 
         {
-          BoundaryValuesV<dim> boundary_values_v_function;
-          boundary_values_v_function.set_time (time);
+          BoundaryValuesE<dim> boundary_values_e_function;
+          boundary_values_e_function.set_time (time);
 
           std::map<types::global_dof_index,double> boundary_values;
           VectorTools::interpolate_boundary_values (dof_handler,
                                                     0,
-                                                    boundary_values_v_function,
+                                                    boundary_values_e_function,
                                                     boundary_values);
 
 
@@ -662,8 +641,8 @@ namespace Step23
 
 
           MatrixTools::apply_boundary_values (boundary_values,
-                                              matrix_v,
-                                              solution_v,
+                                              matrix_e,
+                                              solution_e,
                                               system_rhs);
         }
         solve_e ();
@@ -677,12 +656,12 @@ namespace Step23
         // saving us the expense of a temporary vector and several lines of
         // code:
         output_results ();
-
+/*
         std::cout << "   Total energy: "
                   << (mass_matrix.matrix_norm_square (solution_v) +
                       laplace_matrix.matrix_norm_square (solution_u)) / 2
                   << std::endl;
-
+*/
         old_solution_b = solution_b;
         old_solution_e = solution_e;
       }
@@ -701,7 +680,7 @@ int main ()
       using namespace dealii;
       using namespace Step23;
 
-      MaxwellTD<2> wave_equation_solver;
+      MaxwellTD<2> wave_equation_solver(0);
       wave_equation_solver.run ();
     }
   catch (std::exception &exc)
