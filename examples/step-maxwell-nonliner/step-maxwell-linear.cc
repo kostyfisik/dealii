@@ -124,7 +124,7 @@ namespace Step23
 
   private:
     void setup_system ();
-	void assemble_matrix();
+	void assemble_system();
     void solve_b ();
     void solve_e ();
     void output_results () const;
@@ -143,7 +143,7 @@ namespace Step23
 
     Vector<double>       solution_e, solution_b;
     Vector<double>       old_solution_e, old_solution_b;
-    Vector<double>       system_rhd;
+    Vector<double>       system_rhs;
 
     double time, time_step;
     unsigned int timestep_number;
@@ -321,10 +321,10 @@ namespace Step23
     sparsity_pattern.copy_from (dsp);
 	
 
-	std::vector<types::global_dof_index> dofs_per_comonent(dim+dim);
-	DoFTools::count_dofs_per_component (dof_handler, dofs_per_comonent);
-	const unsigned int n_e = dofs_per_comonent[0],
-					   n_b = dofs_per_comonent[dim];
+	//std::vector<types::global_dof_index> dofs_per_comonent(dim+dim);
+	//DoFTools::count_dofs_per_component (dof_handler, dofs_per_comonent);
+	//const unsigned int n_e = dofs_per_comonent[0],
+	//				   n_b = dofs_per_comonent[dim];
 
     // Then comes a block where we have to initialize the 3 matrices we need
     // in the course of the program: the mass matrix, the Laplace matrix, and
@@ -349,16 +349,16 @@ namespace Step23
     // processors are available in a machine. The matrices for solving linear
     // systems will be filled in the run() method because we need to re-apply
     // boundary conditions every time step.
-    mt_G.reinit (n_b, n_b);
-	mt_K.reinit (n_e, n_b);
-	mt_P.reinit (n_b, n_b);
-	mt_C.reinit (n_e, n_e);
-	mt_Kt.reinit(n_e, n_b);
-	mt_S.reinit (n_e, n_e);
-	ms_Q.reinit (n_b, n_e);
+    mt_G.reinit (sparsity_pattern);
+	mt_K.reinit (sparsity_pattern);
+	mt_P.reinit (sparsity_pattern);
+	mt_C.reinit (sparsity_pattern);
+	mt_Kt.reinit(sparsity_pattern);
+	mt_S.reinit (sparsity_pattern);
+	mt_Q.reinit (sparsity_pattern);
 
-    matrix_b.reinit (n_b, n_b);
-	matrix_e.reinit (n_e, n_e);
+    matrix_b.reinit (sparsity_pattern);
+	matrix_e.reinit (sparsity_pattern);
 
     // The rest of the function is spent on setting vector sizes to the
     // correct value. The final line closes the hanging node constraints
@@ -366,16 +366,16 @@ namespace Step23
     // or have been computed (i.e. there was no need to call
     // DoFTools::make_hanging_node_constraints as in other programs), but we
     // need a constraints object in one place further down below anyway.
-    solution_b.reinit (n_b);
-    solution_e.reinit (n_e);
-    old_solution_b.reinit (n_b);
-    old_solution_e.reinit (n_e);
-    system_rhs.reinit (n_e);
+    solution_b.reinit (dof_handler.n_dofs());
+    solution_e.reinit (dof_handler.n_dofs());
+    old_solution_b.reinit (dof_handler.n_dofs());
+    old_solution_e.reinit (dof_handler.n_dofs());
+    system_rhs.reinit (dof_handler.n_dofs());
 
   }
 
   template <int dim>
-  void MaxwellTD::assemble_system ()
+  void MaxwellTD<dim>::assemble_system ()
   {
 	QGauss<dim> quadrature_formula(degree+2);
 	
@@ -388,8 +388,8 @@ namespace Step23
 
 
 	
-	const FEValuesExtractors::Vector E_filed (0);
-	const FEValuesExtractors::Vector B_Field (dim);
+	const FEValuesExtractors::Vector E_field (0);
+	const FEValuesExtractors::Vector B_field (dim);
 
 	typename DoFHandler<dim>::active_cell_iterator
 	cell = dof_handler.begin_active(),
@@ -403,7 +403,7 @@ namespace Step23
 		  {
 			const Tensor<1,dim> phi_i_E			= fe_values[E_field].value(i,q);
 			const Tensor<1,dim> curl_phi_i_E	= fe_values[E_field].curl(i,q);
-			const Tensor<1,dim> phi_i_B			= fe_values[B_field[.value(i,q);
+			const Tensor<1,dim> phi_i_B			= fe_values[B_field].value(i,q);
 
 			  for (unsigned int j=0; j<dofs_per_cell; ++j)
 			  {
@@ -560,7 +560,7 @@ namespace Step23
 		mt_G.vmult (system_rhs, old_solution_b);
 
 		mt_P.vmult (tmp, old_solution_b);
-		system_rhd.add (-time_step/2, tmp);
+		system_rhs.add (-time_step/2, tmp);
 
         mt_K.vmult (tmp, old_solution_e);
 		system_rhs.add (-time_step,tmp);
@@ -579,7 +579,7 @@ namespace Step23
           std::map<types::global_dof_index,double> boundary_values;
           VectorTools::interpolate_boundary_values (dof_handler,
                                                     0,
-                                                    ZeroFunction<dim>,
+                                                    ZeroFunction<dim>(),
                                                     boundary_values);
 
           // The matrix for solve_u() is the same in every time steps, so one
