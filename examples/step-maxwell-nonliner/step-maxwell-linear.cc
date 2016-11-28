@@ -144,7 +144,7 @@ namespace Step23
     ConstraintMatrix constraints;
 
 
-    //BlockSparsityPattern      sparsity_pattern;
+    BlockSparsityPattern      sparsity_pattern;
 	
 	//Defining matrixs with size of 2X2
 	//G + delta_t/2 * P is actually sys_matrix_b.block(0,0)
@@ -353,6 +353,9 @@ namespace Step23
 	const unsigned int n_b = dofs_per_comonent[0],
 					   n_e = dofs_per_comonent[dim];
 
+	std::cout<<"n_b: "<<n_b << std::endl << "n_e: "<<n_e << std::endl;
+
+
     // Then comes a block where we have to initialize the 3 matrices we need
     // in the course of the program: the mass matrix, the Laplace matrix, and
     // the matrix $M+k^2\theta^2A$ used when solving for $U^n$ in each time
@@ -408,55 +411,25 @@ namespace Step23
 	matrix_1.collect_sizes();
 
 */
-	BlockDynamicSparsityPattern sys_matrix_b(2,2);
-	sys_matrix_b.block(0, 0).reinit (n_b, n_b);
-	sys_matrix_b.block(0, 1).reinit (n_b, n_e);
-	sys_matrix_b.block(1, 0).reinit (n_e, n_b);
-	sys_matrix_b.block(1, 1).reinit (n_e, n_e);
-	sys_matrix_b.collect_sizes();
+	BlockDynamicSparsityPattern dsp(2,2);
+	dsp.block(0, 0).reinit (n_b, n_b);
+	dsp.block(0, 1).reinit (n_b, n_e);
+	dsp.block(1, 0).reinit (n_e, n_b);
+	dsp.block(1, 1).reinit (n_e, n_e);
+	dsp.collect_sizes();
+
+	DoFTools::make_sparsity_pattern (dof_handler, dsp);
+	sparsity_pattern.copy_from(dsp);
 
 
-	BlockDynamicSparsityPattern rhs_matrix_k_b(2,2);
-	rhs_matrix_k_b.block(0, 0).reinit (n_b, n_b);
-	rhs_matrix_k_b.block(0, 1).reinit (n_b, n_e);
-	rhs_matrix_k_b.block(1, 0).reinit (n_e, n_b);
-	rhs_matrix_k_b.block(1, 1).reinit (n_e, n_e);
-	rhs_matrix_k_b.collect_sizes();
+	sys_matrix_b.reinit(sparsity_pattern);
+	rhs_matrix_k_b.reinit(sparsity_pattern);
+	rhs_matrix_gp_b.reinit(sparsity_pattern);
 
-	BlockDynamicSparsityPattern rhs_matrix_gp_b(2,2);
-	rhs_matrix_gp_b.block(0, 0).reinit (n_b, n_b);
-	rhs_matrix_gp_b.block(0, 1).reinit (n_b, n_e);
-	rhs_matrix_gp_b.block(1, 0).reinit (n_e, n_b);
-	rhs_matrix_gp_b.block(1, 1).reinit (n_e, n_e);
-	rhs_matrix_gp_b.collect_sizes();
-
-	BlockDynamicSparsityPattern sys_matrix_e(2,2);
-	sys_matrix_e.block(0, 0).reinit (n_b, n_b);
-	sys_matrix_e.block(0, 1).reinit (n_b, n_e);
-	sys_matrix_e.block(1, 0).reinit (n_e, n_b);
-	sys_matrix_e.block(1, 1).reinit (n_e, n_e);
-	sys_matrix_e.collect_sizes();
-
-	BlockDynamicSparsityPattern rhs_matrix_k_e(2,2);
-	rhs_matrix_k_e.block(0, 0).reinit (n_b, n_b);
-	rhs_matrix_k_e.block(0, 1).reinit (n_b, n_e);
-	rhs_matrix_k_e.block(1, 0).reinit (n_e, n_b);
-	rhs_matrix_k_e.block(1, 1).reinit (n_e, n_e);
-	rhs_matrix_k_e.collect_sizes();
-
-	BlockDynamicSparsityPattern rhs_matrix_cs_e(2,2);
-	rhs_matrix_cs_e.block(0, 0).reinit (n_b, n_b);
-	rhs_matrix_cs_e.block(0, 1).reinit (n_b, n_e);
-	rhs_matrix_cs_e.block(1, 0).reinit (n_e, n_b);
-	rhs_matrix_cs_e.block(1, 1).reinit (n_e, n_e);
-	rhs_matrix_cs_e.collect_sizes();
-
-	BlockDynamicSparsityPattern rhs_matrix_q_e(2,2);
-	rhs_matrix_q_e.block(0, 0).reinit (n_b, n_b);
-	rhs_matrix_q_e.block(0, 1).reinit (n_b, n_e);
-	rhs_matrix_q_e.block(1, 0).reinit (n_e, n_b);
-	rhs_matrix_q_e.block(1, 1).reinit (n_e, n_e);
-	rhs_matrix_q_e.collect_sizes();
+	sys_matrix_e.reinit(sparsity_pattern);
+	rhs_matrix_k_e.reinit(sparsity_pattern);
+	rhs_matrix_cs_e.reinit(sparsity_pattern);
+	rhs_matrix_q_e.reinit(sparsity_pattern);
 
     // The rest of the function is spent on setting vector sizes to the
     // correct value. The final line closes the hanging node constraints
@@ -496,6 +469,12 @@ namespace Step23
 	const unsigned int dofs_per_cell	= fe.dofs_per_cell;
 	const unsigned int n_q_points		= quadrature_formula.size();
 
+
+	std::cout<<"dofs_per_cell: "<<dofs_per_cell<<std::endl;
+	std::cout<<"n_q_points: "<<n_q_points<<std::endl;
+
+
+
 	std::vector<types::global_dof_index> local_dof_indices (dofs_per_cell);
 
 
@@ -525,7 +504,7 @@ namespace Step23
 		local_rhs_cs_e	=	0;
 		local_rhs_q_e	=	0;
 
-		std::cout<<"in cells..assembling.." << std::endl;
+//		std::cout<<"in cells..assembling.." << std::endl;
 		
 		for (unsigned int q=0; q<n_q_points;++q)
 		  for (unsigned int i=0; i<dofs_per_cell; ++i)
@@ -554,12 +533,12 @@ namespace Step23
 
 				local_matrix_b (i,j)	+=	phi_i_B * phi_j_B * fe_values.JxW(q) * (1/mu_r + 1/mu_r/mu_r*sigma_m*time_step);
 
-				local_rhs_k_b (i,j)		+=	time_step * 1 / mu_r * curl_phi_i_E * phi_j_B * fe_values.JxW(q);
+				local_rhs_k_b (i,j)		+=	time_step * 1 / mu_r * curl_phi_j_E * phi_i_B * fe_values.JxW(q);
 
 				local_rhs_gp_b (i,j)	+=	phi_i_B * phi_j_B * fe_values.JxW(q) * (1/mu_r - 1/mu_r/mu_r*sigma_m*time_step);
 				
 				local_matrix_e (i,j)	+=	phi_i_E * phi_j_E * fe_values.JxW(q) * (eps_r + time_step/2 * sigma_e);
-				local_rhs_k_e (i,j)		+=	time_step * 1 / mu_r * curl_phi_j_E * phi_i_B * fe_values.JxW(q);
+				local_rhs_k_e (i,j)		+=	time_step * 1 / mu_r * curl_phi_i_E * phi_j_B * fe_values.JxW(q);
 				local_rhs_cs_e (i,j)	+=	phi_i_E * phi_j_E * fe_values.JxW(q) * (eps_r - time_step/2 * sigma_e);
 				local_rhs_q_e (i,j)		+=	time_step * phi_i_B * phi_j_E * fe_values.JxW(q);
 
@@ -567,7 +546,7 @@ namespace Step23
 			 
 		  }
 
-		std::cout<<"local function..assembling..ok!" << std::endl;
+//		std::cout<<"local function..assembling..ok!" << std::endl;
 
 		cell->get_dof_indices (local_dof_indices);
         for (unsigned int i=0; i<dofs_per_cell; ++i)
@@ -584,30 +563,31 @@ namespace Step23
 								 local_rhs_gp_b(i,j));
 
 
-//            sys_matrix_e.add (local_dof_indices[i],
-//								 local_dof_indices[j],
-//								 local_matrix_e(i,j));
-			std::cout << "dofs_per_cell: " <<dofs_per_cell<<std::endl;
+            sys_matrix_e.add (local_dof_indices[i],
+								 local_dof_indices[j],
+								 local_matrix_e(i,j));
+/*
+std::cout << "dofs_per_cell: " <<dofs_per_cell<<std::endl;
 std::cout<<" i = " << i << std::endl;
 std::cout<<" j = " << j << std::endl<< std::endl;
+*/
 
-
-//            rhs_matrix_k_e.add (local_dof_indices[i],
-//								 local_dof_indices[j],
-//								 local_rhs_k_e(i,j));
+            rhs_matrix_k_e.add (local_dof_indices[i],
+								 local_dof_indices[j],
+								 local_rhs_k_e(i,j));
 
 //std::cout<<"rhs_matrix_k_e..ok!" << std::endl;
 
 
-//            rhs_matrix_cs_e.add (local_dof_indices[i],
-//								 local_dof_indices[j],
-//								 local_rhs_cs_e(i,j));
+            rhs_matrix_cs_e.add (local_dof_indices[i],
+								 local_dof_indices[j],
+								 local_rhs_cs_e(i,j));
 
 //std::cout<<"rhs_matrix_cs_e..ok!" << std::endl;
 
-//            rhs_matrix_q_e.add (local_dof_indices[i],
-//								 local_dof_indices[j],
-//								 local_rhs_q_e(i,j));
+            rhs_matrix_q_e.add (local_dof_indices[i],
+								 local_dof_indices[j],
+								 local_rhs_q_e(i,j));
 
 //			std::cout<<"rhs_matrix_q_e..ok!" << std::endl;
 
@@ -761,9 +741,9 @@ std::cout<<"end of assembling..ok!" << std::endl;
                   << std::endl;
 
         std::cout << "____ " << old_solution.block(1).size()<< std::endl
-			<< ";;;;;;" << rhs_matrix_k_b.n() << std::endl;
+			<< ";;;;;;" << rhs_matrix_k_b.block(1,0).m() << std::endl;
 
-		rhs_matrix_k_b.block(1,0).vmult ( system_rhs.block(0),old_solution.block(1) );
+		rhs_matrix_k_b.block(0,1).vmult ( system_rhs.block(0),old_solution.block(1) );
         std::cout << "this is test 1" << std::endl;
 	//	tmp.add (rhs_matrix_gp_b.block(0,0),old_solution.block(0));
 	//	tmp.add(1,old_solution.block(0));
@@ -811,6 +791,9 @@ std::cout<<"end of assembling..ok!" << std::endl;
           // it is the sum of the mass matrix and a weighted Laplace matrix:
 //          matrix_b.copy_from (mt_G);
 //          matrix_b.add (time_step/2.0, mt_P);
+//
+			
+std::cout << "boundary B...OK " << std::endl;
 
 
 
@@ -840,7 +823,7 @@ std::cout<<"end of assembling..ok!" << std::endl;
 		system_rhs.add (time_step, tmp);
 		*/
 
-		rhs_matrix_k_e.block(0,1).vmult (system_rhs.block(1), solution.block(0));
+		rhs_matrix_k_e.block(1,0).vmult (system_rhs.block(1), solution.block(0));
 		rhs_matrix_cs_e.block(1,1).vmult (tmp,old_solution.block(1));
 
 		system_rhs.block(1).add (1,tmp);
