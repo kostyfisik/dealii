@@ -533,14 +533,14 @@ namespace Step23
 
 				local_matrix_b (i,j)	+=	phi_i_B * phi_j_B * fe_values.JxW(q) * (1/mu_r + 1/mu_r/mu_r*sigma_m*time_step);
 
-				local_rhs_k_b (i,j)		+=	time_step * 1 / mu_r * curl_phi_j_E * phi_i_B * fe_values.JxW(q);
+				local_rhs_k_b (i,j)		+=	-1 * time_step * 1 / mu_r * curl_phi_j_E * phi_i_B * fe_values.JxW(q);
 
 				local_rhs_gp_b (i,j)	+=	phi_i_B * phi_j_B * fe_values.JxW(q) * (1/mu_r - 1/mu_r/mu_r*sigma_m*time_step);
 				
 				local_matrix_e (i,j)	+=	phi_i_E * phi_j_E * fe_values.JxW(q) * (eps_r + time_step/2 * sigma_e);
 				local_rhs_k_e (i,j)		+=	time_step * 1 / mu_r * curl_phi_i_E * phi_j_B * fe_values.JxW(q);
 				local_rhs_cs_e (i,j)	+=	phi_i_E * phi_j_E * fe_values.JxW(q) * (eps_r - time_step/2 * sigma_e);
-				local_rhs_q_e (i,j)		+=	time_step * phi_i_B * phi_j_E * fe_values.JxW(q);
+				local_rhs_q_e (i,j)		+=	-1 * time_step * phi_i_B * phi_j_E * fe_values.JxW(q);
 
 				}
 			 
@@ -791,7 +791,7 @@ std::cout<<"end of assembling..ok!" << std::endl;
         // nodes and then use the result to apply boundary values as we
         // usually do. The result is then handed off to the solve_u()
         // function:
-       /*
+       
 		{
           BoundaryValuesB<dim> boundary_values_b_function;
           boundary_values_b_function.set_time (time);
@@ -799,7 +799,7 @@ std::cout<<"end of assembling..ok!" << std::endl;
           std::map<types::global_dof_index,double> boundary_values;
           VectorTools::interpolate_boundary_values (dof_handler,
                                                     0,
-                                                    boundary_values_b_function,
+                                                    ZeroFunction<dim>(dim+dim),
                                                     boundary_values);
 
           // The matrix for solve_u() is the same in every time steps, so one
@@ -823,7 +823,7 @@ std::cout << "boundary B...OK " << std::endl;
 											  solution.block(0),
 											  system_rhs.block(0));
         }
-		*/
+		
         solve_b ();
 
 
