@@ -282,7 +282,7 @@ namespace Step23
 
 
   template <int dim>
-  double BoundaryValuesB<dim>::value (const Point<dim> &p,
+  double BoundaryValuesB<dim>::value (const Point<dim> &/*p*/,
                                       const unsigned int component) const
   {
     Assert (component == 0, ExcInternalError());
@@ -661,16 +661,41 @@ std::cout<<"end of assembling..ok!" << std::endl;
   {
     DataOut<dim> data_out;
 
+    std::vector<std::string> solution_names;
+    switch (dim)
+      {
+      case 2:
+        solution_names.push_back ("Bx");
+        solution_names.push_back ("By");
+        solution_names.push_back ("Ex");
+        solution_names.push_back ("Ey");
+        break;
+
+      case 3:
+        solution_names.push_back ("Bx");
+        solution_names.push_back ("By");
+        solution_names.push_back ("Bz");
+        solution_names.push_back ("Ex");
+        solution_names.push_back ("Ey");
+		solution_names.push_back ("Ez");
+        break;
+
+      default:
+        Assert (false, ExcNotImplemented());
+      }
+
+
     data_out.attach_dof_handler (dof_handler);
-    data_out.add_data_vector (solution.block(0), "B");
-    data_out.add_data_vector (solution.block(1), "B");
+    data_out.add_data_vector (solution, solution_names);
 
     data_out.build_patches ();
 
-    const std::string filename = "solution-" +
-                                 Utilities::int_to_string (timestep_number, 3) +
-                                 ".vtk";
-    std::ofstream output (filename.c_str());
+	std::ostringstream filename;
+	filename << "solution-"
+			 <<	Utilities::int_to_string (timestep_number, 3)
+			 <<	".vtk";
+
+    std::ofstream output (filename.str().c_str());
     data_out.write_vtk (output);
   }
 
@@ -729,7 +754,8 @@ std::cout<<"end of assembling..ok!" << std::endl;
     // we almost always work on a single time step at a time, and where it
     // never happens that, for example, one would like to evaluate a
     // space-time function for all times at any given spatial location.
-	Vector<double> tmp (system_rhs.block(1).size());
+	Vector<double> tmp1 (system_rhs.block(0).size());
+	Vector<double> tmp2 (system_rhs.block(1).size());
 //    Vector<double> forcing_terms (solution_u.size());
 
     for (timestep_number=1, time=time_step;
@@ -740,18 +766,12 @@ std::cout<<"end of assembling..ok!" << std::endl;
                   << " at t=" << time
                   << std::endl;
 
-        std::cout << "____ " << old_solution.block(1).size()<< std::endl
-			<< ";;;;;;" << rhs_matrix_k_b.block(1,0).m() << std::endl;
+        std::cout << "____ " << old_solution.block(0).size()<< std::endl
+			<< ";;;;;;" << rhs_matrix_k_b.block(0,0).m() << std::endl;
 
 		rhs_matrix_k_b.block(0,1).vmult ( system_rhs.block(0),old_solution.block(1) );
-        std::cout << "this is test 1" << std::endl;
-	//	tmp.add (rhs_matrix_gp_b.block(0,0),old_solution.block(0));
-	//	tmp.add(1,old_solution.block(0));
-		rhs_matrix_gp_b.block(0,0).vmult ( tmp, old_solution.block(0));
-		system_rhs.block(0).add(1,tmp);
-
-        std::cout << "this is test " << std::endl;
-
+		rhs_matrix_gp_b.block(0,0).vmult ( tmp1, old_solution.block(0));
+		system_rhs.block(0).add(1,tmp1);
 
 /*
 		mt_G.vmult (system_rhs, old_solution_b);
@@ -771,14 +791,15 @@ std::cout<<"end of assembling..ok!" << std::endl;
         // nodes and then use the result to apply boundary values as we
         // usually do. The result is then handed off to the solve_u()
         // function:
-        {
+       /*
+		{
           BoundaryValuesB<dim> boundary_values_b_function;
           boundary_values_b_function.set_time (time);
 
           std::map<types::global_dof_index,double> boundary_values;
           VectorTools::interpolate_boundary_values (dof_handler,
                                                     0,
-                                                    ZeroFunction<dim>(),
+                                                    boundary_values_b_function,
                                                     boundary_values);
 
           // The matrix for solve_u() is the same in every time steps, so one
@@ -802,6 +823,7 @@ std::cout << "boundary B...OK " << std::endl;
 											  solution.block(0),
 											  system_rhs.block(0));
         }
+		*/
         solve_b ();
 
 
@@ -824,14 +846,14 @@ std::cout << "boundary B...OK " << std::endl;
 		*/
 
 		rhs_matrix_k_e.block(1,0).vmult (system_rhs.block(1), solution.block(0));
-		rhs_matrix_cs_e.block(1,1).vmult (tmp,old_solution.block(1));
+		rhs_matrix_cs_e.block(1,1).vmult (tmp2,old_solution.block(1));
 
-		system_rhs.block(1).add (1,tmp);
+		system_rhs.block(1).add (1,tmp2);
 
 		//simply ignoring current J first
 		
 
-
+/*
 
         {
           BoundaryValuesE<dim> boundary_values_e_function;
@@ -855,6 +877,9 @@ std::cout << "boundary B...OK " << std::endl;
 											  solution.block(1),
 											  system_rhs.block(1));
         }
+
+*/
+
         solve_e ();
 
         // Finally, after both solution components have been computed, we
