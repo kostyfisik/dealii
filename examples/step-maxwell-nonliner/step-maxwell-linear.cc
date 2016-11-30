@@ -166,7 +166,10 @@ namespace Step23
 
 //    Vector<double>       solution_e, solution_b;
 //    Vector<double>       old_solution_e, old_solution_b;
-    BlockVector<double>       system_rhs;
+    BlockVector<double>		system_rhs;
+
+	//power
+	BlockVector<double>		system_power;
 
     double time, time_step;
     unsigned int timestep_number;
@@ -176,6 +179,7 @@ namespace Step23
 	double sigma_e=0;
 	double sigma_m=0;
 //    const double theta;
+	
   };
 
 
@@ -239,56 +243,70 @@ namespace Step23
   // Finally, we have boundary values for $u$ and $v$. They are as described
   // in the introduction, one being the time derivative of the other:
   template <int dim>
-  class BoundaryValuesE : public Function<dim>
+  class PowerBoundaryValues : public Function<dim>
   {
   public:
-    BoundaryValuesE () : Function<dim>() {}
+    PowerBoundaryValues () : Function<dim>(dim) {}
 
-    virtual double value (const Point<dim>   &p,
-                          const unsigned int  component = 0) const;
+    virtual void vector_value (const Point<dim>   &p,
+								 Vector<double>		&values) const;
   };
 
 
-
-
   template <int dim>
-  class BoundaryValuesB : public Function<dim>
+  void PowerBoundaryValues<dim>::vector_value (const Point<dim>	&p,
+												 Vector<double>		&values) const
   {
-  public:
-    BoundaryValuesB () : Function<dim>() {}
+    Assert (values.size() != dim,
+            ExcDimensionMismatch (values.size(), dim));
 
-    virtual double value (const Point<dim>   &p,
-                          const unsigned int  component = 0) const;
-  };
+//define system power incidence direction
+//spherical coordinate system
+//theta is the angle of vector S with Sz
+//phi	is the angle of vector S*cos(theta) with Sx
+//in rad.....
+	double incid_theta=0;
+	double incid_phi=0;
+	double H_magnitude = 1;
+
+	double sin_theta = std::sin(incid_theta);
+	double cos_theta = std::cos(incid_theta);
+	double sin_phi	 = std::sin(incid_phi);
+	double cos_phi	 = std::cos(incid_phi);
 
 
+//	double Z_impendence = 1 * 376.7;
+//	double var_t_pulse = 0;
 
-
-  template <int dim>
-  double BoundaryValuesE<dim>::value (const Point<dim> &p,
-                                      const unsigned int component) const
-  {
-    Assert (component == 0, ExcInternalError());
-
-    if ((this->get_time() <= 0.5) &&
-        (p[0] < 0) &&
-        (p[1] < 1./3) &&
-        (p[1] > -1./3))
-      return std::sin (this->get_time() * 4 * numbers::PI);
+	//define time dependent value
+/*    if ((this->get_time() <= 0.5)
+		var_t_pulse = std::sin (this->get_time() * 4 * numbers::PI);
     else
-      return 0;
-  }
+		var_t_pulse =  0;
+*/
 
+	//define H vector, here assuming mu_r = 1
 
+	if (p[2] >=0.96)
+		{
+		  values(0) = (sin_theta * sin_theta * sin_phi + cos_theta * cos_theta * cos_phi) * H_magnitude;
+		  values(1) = (sin_theta * sin_theta * cos_phi + cos_theta * cos_theta * sin_phi) * H_magnitude * (-1);
+		  values(2) = (sin_theta * cos_theta) * H_magnitude;
 
-  template <int dim>
-  double BoundaryValuesB<dim>::value (const Point<dim> &/*p*/,
-                                      const unsigned int component) const
-  {
-    Assert (component == 0, ExcInternalError());
+//		return 1;
+		}
 
-    return 0;
-  }
+	else
+		{
+		  values(0)=0;
+		  values(1)=0;
+		  values(2)=0;
+//		  return 0;
+		}
+		  
+
+	}
+
 
 
 
@@ -454,35 +472,56 @@ namespace Step23
 	system_rhs.block(1).reinit (n_e);
 	system_rhs.collect_sizes();
 
+	system_power.reinit (2);
+	system_power.block(0).reinit (n_b);
+	system_power.block(1).reinit (n_e);
+	system_power.collect_sizes();
+
 
   }
 
   template <int dim>
   void MaxwellTD<dim>::assemble_system ()
   {
-	QGauss<dim> quadrature_formula(degree+2);
+	QGauss<dim>		quadrature_formula(degree+2);
+	QGauss<dim-1>	face_quadrature_formula(degree+2);
 	
 	FEValues<dim> fe_values(fe, quadrature_formula, 
 							update_values	| update_gradients | 
 							update_quadrature_points | update_JxW_values);
 
+
+	FEFaceValues<dim> fe_face_values (fe, face_quadrature_formula,
+									  update_values | update_normal_vectors |
+									  update_quadrature_points | update_JxW_values);
+
+
 	const unsigned int dofs_per_cell	= fe.dofs_per_cell;
 	const unsigned int n_q_points		= quadrature_formula.size();
+	const unsigned int n_face_q_points	= face_quadrature_formula.size();
 
 
 	std::cout<<"dofs_per_cell: "<<dofs_per_cell<<std::endl;
 	std::cout<<"n_q_points: "<<n_q_points<<std::endl;
+	std::cout<<"n_face_q_points: "<<n_face_q_points<<std::endl;
 
 
 
 	std::vector<types::global_dof_index> local_dof_indices (dofs_per_cell);
 
+	//define boundary_power
+	PowerBoundaryValues<dim>	power_boundary_values;
+
+	Vector<double> boundary_values (n_face_q_points);
 
 //	FullMatrix<double>	local_matrix (dofs_per_cell, dofs_per_cell);
 //	Vector<double>		local_rhs (dofs_per_cell);
 
 	FullMatrix<double>	local_matrix_b(dofs_per_cell,dofs_per_cell), local_rhs_k_b(dofs_per_cell,dofs_per_cell), local_rhs_gp_b(dofs_per_cell,dofs_per_cell);
 	FullMatrix<double>	local_matrix_e(dofs_per_cell,dofs_per_cell), local_rhs_k_e(dofs_per_cell,dofs_per_cell), local_rhs_cs_e(dofs_per_cell,dofs_per_cell), local_rhs_q_e(dofs_per_cell,dofs_per_cell);
+
+	//define local power
+	Vector<double>	local_power	(dofs_per_cell);
 
 	
 	const FEValuesExtractors::Vector B_field (0);
@@ -503,6 +542,8 @@ namespace Step23
 		local_rhs_k_e	=	0;
 		local_rhs_cs_e	=	0;
 		local_rhs_q_e	=	0;
+
+		local_power		=	0;
 
 //		std::cout<<"in cells..assembling.." << std::endl;
 		
@@ -543,8 +584,29 @@ namespace Step23
 				local_rhs_q_e (i,j)		+=	-1 * time_step * phi_i_B * phi_j_E * fe_values.JxW(q);
 
 				}
-			 
+		 
 		  }
+
+
+		for (unsigned int face_n=0; face_n<GeometryInfo<dim>::faces_per_cell; ++face_n)
+		  if(cell->at_boundary(face_n))
+			{
+			  fe_face_values.reinit (cell,face_n);
+
+			  power_boundary_values.vector_value(fe_face_values.get_quadrature_points(),boundary_values);
+
+			  for (unsigned int q=0; q<n_face_q_points; ++q)
+				for (unsigned int i=0; i<dofs_per_cell; ++i)
+				  local_power(i) += -1 * boundary_values[q] * fe_face_values.normal_vector(q) * fe_face_values.JxW(q);
+
+			}
+
+
+
+
+
+
+
 
 //		std::cout<<"local function..assembling..ok!" << std::endl;
 
@@ -590,8 +652,10 @@ std::cout<<" j = " << j << std::endl<< std::endl;
 								 local_rhs_q_e(i,j));
 
 //			std::cout<<"rhs_matrix_q_e..ok!" << std::endl;
-
 		  }
+
+		for (unsigned int i=0; i<dofs_per_cell; ++i)
+		  system_power(local_dof_indices[i]) += local_power(i);
 	}			//end of cells loop
 
 
@@ -792,6 +856,7 @@ std::cout<<"end of assembling..ok!" << std::endl;
         // usually do. The result is then handed off to the solve_u()
         // function:
        
+/*
 		{
           BoundaryValuesB<dim> boundary_values_b_function;
           boundary_values_b_function.set_time (time);
@@ -824,6 +889,7 @@ std::cout << "boundary B...OK " << std::endl;
 											  system_rhs.block(0));
         }
 		
+*/		
         solve_b ();
 
 
