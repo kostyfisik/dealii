@@ -250,6 +250,10 @@ namespace Step23
 
     virtual void vector_value (const Point<dim>   &p,
 								 Vector<double>		&values) const;
+
+	virtual void vector_value_list (const std::vector<Point<dim>> &points,
+									std::vector<Vector<double>>	  &value_list) const;
+
   };
 
 
@@ -257,8 +261,9 @@ namespace Step23
   void PowerBoundaryValues<dim>::vector_value (const Point<dim>	&p,
 												 Vector<double>		&values) const
   {
-    Assert (values.size() != dim,
+    Assert (values.size() == dim,
             ExcDimensionMismatch (values.size(), dim));
+	Assert (dim > 2, ExcNotImplemented());
 
 //define system power incidence direction
 //spherical coordinate system
@@ -308,6 +313,18 @@ namespace Step23
 	}
 
 
+	template <int dim>
+	void PowerBoundaryValues<dim>::vector_value_list (const std::vector<Point<dim>> &points,
+													 std::vector<Vector<double>>   &value_list ) const
+	{
+	  Assert (value_list.size() == points.size(),ExcDimensionMismatch (value_list.size(), points.size()));
+	  const unsigned int n_points = points.size();
+
+	  for (unsigned int p=0;p<n_points; ++p)
+		PowerBoundaryValues<dim>::vector_value (points[p], value_list[p]);
+	}
+
+
 
 
 
@@ -344,7 +361,7 @@ namespace Step23
   void MaxwellTD<dim>::setup_system ()
   {
     GridGenerator::hyper_cube (triangulation, -1, 1);
-    triangulation.refine_global (2);
+    triangulation.refine_global (3);
 
     std::cout << "Number of active cells: "
               << triangulation.n_active_cells()
@@ -512,7 +529,7 @@ namespace Step23
 	//define boundary_power
 	PowerBoundaryValues<dim>	power_boundary_values;
 
-	Vector<double> boundary_values (n_face_q_points);
+	std::vector<Vector<double>> boundary_values (n_face_q_points,Vector<double>(dim));
 
 //	FullMatrix<double>	local_matrix (dofs_per_cell, dofs_per_cell);
 //	Vector<double>		local_rhs (dofs_per_cell);
@@ -593,11 +610,13 @@ namespace Step23
 			{
 			  fe_face_values.reinit (cell,face_n);
 
-			  power_boundary_values.vector_value(fe_face_values.get_quadrature_points(),boundary_values);
+			  power_boundary_values.vector_value_list(fe_face_values.get_quadrature_points(),boundary_values);
 
 			  for (unsigned int q=0; q<n_face_q_points; ++q)
 				for (unsigned int i=0; i<dofs_per_cell; ++i)
-				  local_power(i) += -1 * boundary_values[q] * fe_face_values.normal_vector(q) * fe_face_values.JxW(q);
+				  //local_power(i) += -1 * fe_face_values[B_field].value(i,q) * fe_face_values.normal_vector(q) * fe_face_values.JxW(q);
+				  local_power(i) += 1;
+
 
 			}
 
@@ -915,6 +934,7 @@ std::cout << "boundary B...OK " << std::endl;
 		rhs_matrix_cs_e.block(1,1).vmult (tmp2,old_solution.block(1));
 
 		system_rhs.block(1).add (1,tmp2);
+		system_rhs.block(1).add (1,system_power.block(1));
 
 		//simply ignoring current J first
 		
