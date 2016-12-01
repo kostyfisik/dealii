@@ -540,6 +540,9 @@ namespace Step23
 	//define local power
 	Vector<double>	local_power	(dofs_per_cell);
 
+
+	Tensor<1,dim>   power_rhs_H;
+
 	
 	const FEValuesExtractors::Vector B_field (0);
 	const FEValuesExtractors::Vector E_field (dim);
@@ -613,10 +616,16 @@ namespace Step23
 			  power_boundary_values.vector_value_list(fe_face_values.get_quadrature_points(),boundary_values);
 
 			  for (unsigned int q=0; q<n_face_q_points; ++q)
+			  {
+				power_rhs_H[0] = boundary_values[q](0);
+				power_rhs_H[1] = boundary_values[q](1);
+				power_rhs_H[2] = boundary_values[q](2);
+
 				for (unsigned int i=0; i<dofs_per_cell; ++i)
 				  //local_power(i) += -1 * fe_face_values[B_field].value(i,q) * fe_face_values.normal_vector(q) * fe_face_values.JxW(q);
 				  local_power(i) += 1;
 
+			  }
 
 			}
 
