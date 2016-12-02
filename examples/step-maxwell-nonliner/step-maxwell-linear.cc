@@ -26,6 +26,7 @@
 #include <deal.II/base/function.h>
 #include <deal.II/base/logstream.h>
 #include <deal.II/base/tensor_function.h>
+#include <deal.II/base/tensor.h>
 
 #include <deal.II/lac/vector.h>
 #include <deal.II/lac/full_matrix.h>
@@ -621,9 +622,17 @@ namespace Step23
 				power_rhs_H[1] = boundary_values[q](1);
 				power_rhs_H[2] = boundary_values[q](2);
 
+
+				//power_rhs_H * fe_face_values.normal_vector(q);
+				std::cout << "power_rhs_H: " << power_rhs_H <<std::endl;
+
+				//const Tensor<1,dim> cross_nor_power;
+				std::cout << "cross_values..." <<cross_product_3d (power_rhs_H, fe_face_values[E_field].value(4,q)) * fe_face_values.normal_vector(q) * fe_face_values.JxW(q)<<std::endl;
+				//std::cout << "cross_values..." <<cross_product_3d(power_rhs_H, fe_face_values.normal_vector(q))<<std::endl;
+
 				for (unsigned int i=0; i<dofs_per_cell; ++i)
-				  //local_power(i) += -1 * fe_face_values[B_field].value(i,q) * fe_face_values.normal_vector(q) * fe_face_values.JxW(q);
-				  local_power(i) += 1;
+				  local_power(i) += cross_product_3d (power_rhs_H, fe_face_values[E_field].value(i,q)) * fe_face_values.normal_vector(q) * fe_face_values.JxW(q);
+				  //local_power(i) += 1;
 
 			  }
 
