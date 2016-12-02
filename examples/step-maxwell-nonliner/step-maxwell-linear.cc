@@ -197,10 +197,10 @@ namespace Step23
   // Let's start with initial values and choose zero for both the value $u$ as
   // well as its time derivative, the velocity $v$:
   template <int dim>
-  class InitialValuesE : public Function<dim>
+  class TimePulseFactor : public Function<dim>
   {
   public:
-    InitialValuesE () : Function<dim>() {}
+    TimePulseFactor () : Function<dim>() {}
 
     virtual double value (const Point<dim>   &p,
                           const unsigned int  component = 0) const;
@@ -208,35 +208,16 @@ namespace Step23
 
 
   template <int dim>
-  class InitialValuesB : public Function<dim>
+  double TimePulseFactor<dim>::value (const Point<dim> &/*p*/,const unsigned int component) const
   {
-  public:
-    InitialValuesB () : Function<dim>() {}
+	Assert (component==0, ExcInternalError());
 
-    virtual double value (const Point<dim>   &p,
-                          const unsigned int  component = 0) const;
-  };
-
-
-
-  template <int dim>
-  double InitialValuesE<dim>::value (const Point<dim>  &/*p*/,
-                                     const unsigned int component) const
-  {
-    Assert (component == 0, ExcInternalError());
-    return 0;
+	if (this->get_time() <=0.5)
+	  return std::sin(this->get_time() * 4 * numbers::PI);
+	else
+	  return 0;
   }
-
-
-
-  template <int dim>
-  double InitialValuesB<dim>::value (const Point<dim>  &/*p*/,
-                                     const unsigned int component) const
-  {
-    Assert (component == 0, ExcInternalError());
-    return 0;
-  }
-
+  
 
 
 
@@ -362,7 +343,7 @@ namespace Step23
   void MaxwellTD<dim>::setup_system ()
   {
     GridGenerator::hyper_cube (triangulation, -1, 1);
-    triangulation.refine_global (3);
+    triangulation.refine_global (5);
 
     std::cout << "Number of active cells: "
               << triangulation.n_active_cells()
@@ -858,6 +839,8 @@ std::cout<<"end of assembling..ok!" << std::endl;
 	Vector<double> tmp1 (system_rhs.block(0).size());
 	Vector<double> tmp2 (system_rhs.block(1).size());
 //    Vector<double> forcing_terms (solution_u.size());
+	TimePulseFactor<dim> time_pulse_factor;
+	Point<dim> p_time;
 
     for (timestep_number=1, time=time_step;
          time<=5;
@@ -948,11 +931,13 @@ std::cout << "boundary B...OK " << std::endl;
 		system_rhs.add (time_step, tmp);
 		*/
 
+		time_pulse_factor.set_time (time);
+
 		rhs_matrix_k_e.block(1,0).vmult (system_rhs.block(1), solution.block(0));
 		rhs_matrix_cs_e.block(1,1).vmult (tmp2,old_solution.block(1));
 
 		system_rhs.block(1).add (1,tmp2);
-		system_rhs.block(1).add (1,system_power.block(1));
+		system_rhs.block(1).add (time_pulse_factor.value(p_time,0),system_power.block(1));
 
 		//simply ignoring current J first
 		
