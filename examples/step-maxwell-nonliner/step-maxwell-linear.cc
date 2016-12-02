@@ -274,7 +274,7 @@ namespace Step23
 
 	//define H vector, here assuming mu_r = 1
 
-	if (p[2] >=0.96)
+	if (p[2] >=0.99)
 		{
 		  values(0) = (sin_theta * sin_theta * sin_phi + cos_theta * cos_theta * cos_phi) * H_magnitude;
 		  values(1) = (sin_theta * sin_theta * cos_phi + cos_theta * cos_theta * sin_phi) * H_magnitude * (-1);
@@ -343,7 +343,7 @@ namespace Step23
   void MaxwellTD<dim>::setup_system ()
   {
     GridGenerator::hyper_cube (triangulation, -1, 1);
-    triangulation.refine_global (5);
+    triangulation.refine_global (4);
 
     std::cout << "Number of active cells: "
               << triangulation.n_active_cells()
@@ -703,7 +703,7 @@ std::cout<<"end of assembling..ok!" << std::endl;
   template <int dim>
   void MaxwellTD<dim>::solve_b ()
   {
-    SolverControl           solver_control (1000, 1e-8*system_rhs.l2_norm());
+    SolverControl           solver_control (1000, 1e-12*system_rhs.l2_norm());
     SolverCG<>              cg (solver_control);
 
     cg.solve (sys_matrix_b.block(0,0), solution.block(0), system_rhs.block(0),
@@ -718,7 +718,7 @@ std::cout<<"end of assembling..ok!" << std::endl;
   template <int dim>
   void MaxwellTD<dim>::solve_e ()
   {
-    SolverControl           solver_control (1000, 1e-8*system_rhs.l2_norm());
+    SolverControl           solver_control (1000, 1e-12*system_rhs.l2_norm());
     SolverCG<>              cg (solver_control);
 
     cg.solve (sys_matrix_e.block(1,1), solution.block(1), system_rhs.block(1),
