@@ -15,6 +15,8 @@
 
  *
  * Author: Wolfgang Bangerth, Texas A&M University, 2006
+ * Author: Konstantin Ladutenko, ITMO University, 2016
+ * Author: Hongfeng Ma, Laboratoire Hubert Curien / Universite de Lyon, 2016
  */
 
 
@@ -156,14 +158,8 @@ namespace Step23
 	BlockSparseMatrix<double>	sys_matrix_e, rhs_matrix_k_e, rhs_matrix_cs_e, rhs_matrix_q_e;
 
 
-	//store matrixs
-	//SparseMatrix<double> mt_G,mt_K,mt_P,mt_C,mt_Kt,mt_S,mt_Q;
-
 	BlockVector<double>	solution;		//solution_b, solution_e
 	BlockVector<double>	old_solution;	//old_solu_b, old_solu_e
-
-
-
 
 //    Vector<double>       solution_e, solution_b;
 //    Vector<double>       old_solution_e, old_solution_b;
@@ -185,17 +181,8 @@ namespace Step23
 
 
 
-  // @sect3{Equation data}
+  // TimePulseFactor, used during run()
 
-  // Before we go on filling in the details of the main class, let us define
-  // the equation data corresponding to the problem, i.e. initial and boundary
-  // values for both the solution $u$ and its time derivative $v$, as well as
-  // a right hand side class. We do so using classes derived from the Function
-  // class template that has been used many times before, so the following
-  // should not be a surprise.
-  //
-  // Let's start with initial values and choose zero for both the value $u$ as
-  // well as its time derivative, the velocity $v$:
   template <int dim>
   class TimePulseFactor : public Function<dim>
   {
@@ -222,8 +209,7 @@ namespace Step23
 
 
 
-  // Finally, we have boundary values for $u$ and $v$. They are as described
-  // in the introduction, one being the time derivative of the other:
+  // Finally,the incident power as face integration over face boundaries
   template <int dim>
   class PowerBoundaryValues : public Function<dim>
   {
@@ -310,18 +296,7 @@ namespace Step23
 
 
 
-  // @sect3{Implementation of the <code>WaveEquation</code> class}
-
-  // The implementation of the actual logic is actually fairly short, since we
-  // relegate things like assembling the matrices and right hand side vectors
-  // to the library. The rest boils down to not much more than 130 lines of
-  // actual code, a significant fraction of which is boilerplate code that can
-  // be taken from previous example programs (e.g. the functions that solve
-  // linear systems, or that generate output).
-  //
-  // Let's start with the constructor (for an explanation of the choice of
-  // time step, see the section on Courant, Friedrichs, and Lewy in the
-  // introduction):
+  // Constructor 
   template <int dim>
   MaxwellTD<dim>::MaxwellTD (const unsigned int degree)
 	:
@@ -378,56 +353,7 @@ namespace Step23
     // the matrix $M+k^2\theta^2A$ used when solving for $U^n$ in each time
     // step.
     //
-    // When setting up these matrices, note that they all make use of the same
-    // sparsity pattern object. Finally, the reason why matrices and sparsity
-    // patterns are separate objects in deal.II (unlike in many other finite
-    // element or linear algebra classes) becomes clear: in a significant
-    // fraction of applications, one has to hold several matrices that happen
-    // to have the same sparsity pattern, and there is no reason for them not
-    // to share this information, rather than re-building and wasting memory
-    // on it several times.
-    //
-    // After initializing all of these matrices, we call library functions
-    // that build the Laplace and mass matrices. All they need is a DoFHandler
-    // object and a quadrature formula object that is to be used for numerical
-    // integration. Note that in many respects these functions are better than
-    // what we would usually do in application programs, for example because
-    // they automatically parallelize building the matrices if multiple
-    // processors are available in a machine. The matrices for solving linear
-    // systems will be filled in the run() method because we need to re-apply
-    // boundary conditions every time step.
-	//
-	
-/*	
-    mt_G.reinit (dofs_per);		//b,b
-	mt_K.reinit (sparsity_pattern);		//e,b
-	mt_P.reinit (sparsity_pattern);		//b,b
-	mt_C.reinit (sparsity_pattern);		//e,e
-	mt_Kt.reinit(sparsity_pattern);		//b,e
-	mt_S.reinit (sparsity_pattern);		//e,e
-	mt_Q.reinit (sparsity_pattern);		//b,e
 
-
-    matrix_b.reinit (sparsity_pattern);
-	matrix_e.reinit (sparsity_pattern);
-
-	
-
-	BlockDynamicSparsityPattern matrix_0(2,2);
-	matrix_0.block(0, 0).reinit (n_b, n_b);
-	matrix_0.block(0, 1).reinit (n_b, n_b);
-	matrix_0.block(1, 0).reinit (n_e, n_e);
-	matrix_0.block(1, 1).reinit (n_e, n_e);
-	matrix_0.collect_sizes();
-
-	BlockDynamicSparsityPattern	matrix_1(2,2);
-	matrix_1.block(0,0).reinit	(n_e, n_b);
-	matrix_1.block(0,1).reinit	(n_e, n_e);
-	matrix_1.block(1,0).reinit	(n_b, n_e);
-	matrix_1.block(1,1).reinit	(n_b, n_e);
-	matrix_1.collect_sizes();
-
-*/
 	BlockDynamicSparsityPattern dsp(2,2);
 	dsp.block(0, 0).reinit (n_b, n_b);
 	dsp.block(0, 1).reinit (n_b, n_e);
@@ -564,15 +490,6 @@ namespace Step23
 				const Tensor<1,dim>	phi_j_E			= fe_values[E_field].value(j,q);
 
 
-			/*
-				mt_G  (i,j) = 1.0 / mu_r * phi_i_B * phi_j_B;
-				mt_K  (i,j) = 1.0 / mu_r * curl_phi_i_E * phi_j_B;
-				mt_P  (i,j) = 1.0 / mu_r * sigma_m / mu_r * phi_i_B * phi_j_B;
-				mt_C  (i,j) = eps_r * phi_i_E * phi_j_E;
-				mt_Kt (i,j) = 1.0 / mu_r * curl_phi_i_E * phi_j_B;
-				mt_S  (i,j) = sigma_e * phi_i_E * phi_j_E;
-				mt_Q  (i,j) = phi_i_B * phi_j_E;
-			*/
 
 				local_matrix_b (i,j)	+=	phi_i_B * phi_j_B * fe_values.JxW(q) * (1/mu_r + 1/mu_r/mu_r*sigma_m*time_step);
 
@@ -604,12 +521,11 @@ namespace Step23
 				power_rhs_H[2] = boundary_values[q](2);
 
 
-				//power_rhs_H * fe_face_values.normal_vector(q);
+/*
 				std::cout << "power_rhs_H: " << power_rhs_H <<std::endl;
-
-				//const Tensor<1,dim> cross_nor_power;
 				std::cout << "cross_values..." <<cross_product_3d (power_rhs_H, fe_face_values[E_field].value(4,q)) * fe_face_values.normal_vector(q) * fe_face_values.JxW(q)<<std::endl;
-				//std::cout << "cross_values..." <<cross_product_3d(power_rhs_H, fe_face_values.normal_vector(q))<<std::endl;
+
+*/
 
 				for (unsigned int i=0; i<dofs_per_cell; ++i)
 				  local_power(i) += cross_product_3d (power_rhs_H, fe_face_values[E_field].value(i,q)) * fe_face_values.normal_vector(q) * fe_face_values.JxW(q);
@@ -646,30 +562,17 @@ namespace Step23
             sys_matrix_e.add (local_dof_indices[i],
 								 local_dof_indices[j],
 								 local_matrix_e(i,j));
-/*
-std::cout << "dofs_per_cell: " <<dofs_per_cell<<std::endl;
-std::cout<<" i = " << i << std::endl;
-std::cout<<" j = " << j << std::endl<< std::endl;
-*/
-
             rhs_matrix_k_e.add (local_dof_indices[i],
 								 local_dof_indices[j],
 								 local_rhs_k_e(i,j));
-
-//std::cout<<"rhs_matrix_k_e..ok!" << std::endl;
-
-
             rhs_matrix_cs_e.add (local_dof_indices[i],
 								 local_dof_indices[j],
 								 local_rhs_cs_e(i,j));
-
-//std::cout<<"rhs_matrix_cs_e..ok!" << std::endl;
-
             rhs_matrix_q_e.add (local_dof_indices[i],
 								 local_dof_indices[j],
 								 local_rhs_q_e(i,j));
 
-//			std::cout<<"rhs_matrix_q_e..ok!" << std::endl;
+
 		  }
 
 		for (unsigned int i=0; i<dofs_per_cell; ++i)
