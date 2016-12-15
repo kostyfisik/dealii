@@ -253,7 +253,7 @@ template <int dim>
 void Step4<dim>::make_grid ()
 {
   GridGenerator::hyper_cube (triangulation, -1, 1);
-  triangulation.refine_global (1);
+  triangulation.refine_global (4);
 
   std::cout << "   Number of active cells: "
             << triangulation.n_active_cells()
@@ -333,9 +333,6 @@ void Step4<dim>::assemble_system ()
   // don't have to care about the dimension dependent parts:
   const unsigned int   dofs_per_cell = fe.dofs_per_cell;
   const unsigned int   n_q_points    = quadrature_formula.size();
-
-  std::cout << "dofs_per_cell: " << dofs_per_cell << std::endl;
-  std::cout << "n_q_points: " << n_q_points << std::endl;
 
   FullMatrix<double>   cell_matrix (dofs_per_cell, dofs_per_cell);
   Vector<double>       cell_rhs (dofs_per_cell);
@@ -541,11 +538,11 @@ int main ()
     Step4<2> laplace_problem_2d;
     laplace_problem_2d.run ();
   }
-/*
+
   {
     Step4<3> laplace_problem_3d;
     laplace_problem_3d.run ();
   }
-*/
+
   return 0;
 }
