@@ -247,6 +247,9 @@ namespace Step8
 
     solution.reinit (dof_handler.n_dofs());
     system_rhs.reinit (dof_handler.n_dofs());
+
+	std::cout<<"size of system_matrix: (" << system_matrix.m() <<" , " << system_matrix.n() << ")"<< std::endl;
+
   }
 
 
@@ -278,6 +281,10 @@ namespace Step8
 
     const unsigned int   dofs_per_cell = fe.dofs_per_cell;
     const unsigned int   n_q_points    = quadrature_formula.size();
+
+
+	std::cout << "n_q_points: " << n_q_points << std::endl;
+	std::cout << "dofs_per_cell"<< dofs_per_cell<<std::endl;
 
     FullMatrix<double>   cell_matrix (dofs_per_cell, dofs_per_cell);
     Vector<double>       cell_rhs (dofs_per_cell);
@@ -420,10 +427,18 @@ namespace Step8
         cell->get_dof_indices (local_dof_indices);
         for (unsigned int i=0; i<dofs_per_cell; ++i)
           {
+
             for (unsigned int j=0; j<dofs_per_cell; ++j)
+			{
               system_matrix.add (local_dof_indices[i],
                                  local_dof_indices[j],
                                  cell_matrix(i,j));
+			  if(i==dofs_per_cell-1 && j==dofs_per_cell-1)
+			  {
+				std::cout<< "local_dof (i,j): ( " << local_dof_indices[i] << " , "<< local_dof_indices[j] << ")"<< std::endl;
+				std::cout << " i,j=  " << i <<" , "<< j << std::endl;
+			  }
+			}
 
             system_rhs(local_dof_indices[i]) += cell_rhs(i);
           }
@@ -625,14 +640,14 @@ namespace Step8
   template <int dim>
   void ElasticProblem<dim>::run ()
   {
-    for (unsigned int cycle=0; cycle<8; ++cycle)
+    for (unsigned int cycle=0; cycle<1; ++cycle)
       {
         std::cout << "Cycle " << cycle << ':' << std::endl;
 
         if (cycle == 0)
           {
             GridGenerator::hyper_cube (triangulation, -1, 1);
-            triangulation.refine_global (2);
+            triangulation.refine_global (1);
           }
         else
           refine_grid ();
