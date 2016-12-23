@@ -92,7 +92,7 @@ namespace Maxwell
     BlockSparsityPattern      sparsity_pattern;
     
     //Defining matrixs with size of 2X2
-    //G + delta_t/2 * P is actually sys_matrix_b.block(0, 0)
+    //G + delta_t/2 * P is actually sys_matrix_b.block(0,0)
     //sys_matrix_b is a system_matrix assembled from each cells, namely, local_matrix
     BlockSparseMatrix<double>    sys_matrix_b,
       rhs_matrix_k_b, rhs_matrix_gp_b;
@@ -471,7 +471,7 @@ namespace Maxwell
     SolverControl           solver_control (1000, 1e-12*system_rhs.l2_norm());
     SolverCG<>              cg (solver_control);
     
-    cg.solve (sys_matrix_b.block(0, 0), solution.block(0), system_rhs.block(0),
+    cg.solve (sys_matrix_b.block(0,0), solution.block(0), system_rhs.block(0),
               PreconditionIdentity());
 
     std::cout << "   u-equation: " << solver_control.last_step()
@@ -487,7 +487,7 @@ namespace Maxwell
     SolverControl           solver_control (1000, 1e-12*system_rhs.l2_norm());
     SolverCG<>              cg (solver_control);
     
-    cg.solve (sys_matrix_e.block(1, 1), solution.block(1), system_rhs.block(1),
+    cg.solve (sys_matrix_e.block(1,1), solution.block(1), system_rhs.block(1),
               PreconditionIdentity());
     
     std::cout << "   v-equation: " << solver_control.last_step()
@@ -570,8 +570,8 @@ namespace Maxwell
         std::cout << "____ " << old_solution.block(0).size() <<  std::endl
             << ";;;;;;" << rhs_matrix_k_b.block(0, 0).m() << std::endl;
         
-        rhs_matrix_k_b.block(0, 1).vmult ( system_rhs.block(0), old_solution.block(1) );
-        rhs_matrix_gp_b.block(0, 0).vmult ( tmp1, old_solution.block(0));
+        rhs_matrix_k_b.block(0,1).vmult ( system_rhs.block(0), old_solution.block(1) );
+        rhs_matrix_gp_b.block(0,0).vmult ( tmp1, old_solution.block(0));
         system_rhs.block(0).add (1, tmp1);
         
         
@@ -596,7 +596,7 @@ namespace Maxwell
           std::cout << "boundary B...OK " << std::endl;
 
           MatrixTools::apply_boundary_values (boundary_values,
-                                              sys_matrix_b.block(0, 0),
+                                              sys_matrix_b.block(0,0),
                                               solution.block(0),
                                               system_rhs.block(0));
         }*/
@@ -605,8 +605,8 @@ namespace Maxwell
         
         time_pulse_factor.set_time (time);
         
-        rhs_matrix_k_e.block(1, 0).vmult (system_rhs.block(1), solution.block(0));
-        rhs_matrix_cs_e.block(1, 1).vmult (tmp2, old_solution.block(1));
+        rhs_matrix_k_e.block(1,0).vmult (system_rhs.block(1), solution.block(0));
+        rhs_matrix_cs_e.block(1,1).vmult (tmp2, old_solution.block(1));
         
         system_rhs.block(1).add (1, tmp2);
         system_rhs.block(1).add (time_pulse_factor.value (p_time, 0), system_power.block(1));
@@ -624,7 +624,7 @@ namespace Maxwell
         //                                             boundary_values);
           
         //   MatrixTools::apply_boundary_values (boundary_values,
-        //                                       sys_matrix_e.block(1, 1),
+        //                                       sys_matrix_e.block(1,1),
         //                                       solution.block(1),
         //                                       system_rhs.block(1));
         // }
