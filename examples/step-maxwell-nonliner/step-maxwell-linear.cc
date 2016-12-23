@@ -67,19 +67,18 @@ namespace Maxwell
   using namespace dealii;
 
   template <int dim>
-
   class MaxwellTD
   {
   public:
     MaxwellTD (const unsigned int degree);
-    void run ();
+    void run();
 
   private:
-    void setup_system ();
+    void setup_system();
     void assemble_system();
-    void solve_b ();
-    void solve_e ();
-    void output_results () const;
+    void solve_b();
+    void solve_e();
+    void output_results() const;
 
     const unsigned int degree;
 
@@ -117,13 +116,13 @@ namespace Maxwell
 
 
 
-  // TimePulseFactor, used during run ()
+  // TimePulseFactor, used during run()
 
   template <int dim>
   class TimePulseFactor : public Function<dim>
   {
   public:
-    TimePulseFactor () : Function<dim> () {}
+    TimePulseFactor() : Function<dim>() {}
     virtual double value (const Point<dim>   &p,
                           const unsigned int  component = 0) const;
   };
@@ -135,10 +134,10 @@ namespace Maxwell
   template <int dim>
   double TimePulseFactor<dim>::value (const Point<dim> &/*p*/, const unsigned int component) const
   {
-    Assert (component == 0, ExcInternalError ());
+    Assert (component == 0, ExcInternalError());
     
-    if (this->get_time () <= 0.5)
-      return std::sin (this->get_time () * 4 * numbers::PI);
+    if (this->get_time() <= 0.5)
+      return std::sin (this->get_time() * 4 * numbers::PI);
     else
       return 0;
   }
@@ -150,21 +149,21 @@ namespace Maxwell
   class PowerBoundaryValues : public Function<dim>
   {
   public:
-    PowerBoundaryValues () : Function<dim> (dim) {}
+    PowerBoundaryValues() : Function<dim> (dim) {}
     virtual void vector_value (const Point<dim> &p,
                                Vector<double>   &values) const;
     virtual void vector_value_list (const std::vector<Point<dim>> &points,
-                                    std::vector<Vector<double>>      &value_list) const;
+                                    std::vector<Vector<double>>   &value_list) const;
   };
 
 
   template <int dim>
-  void PowerBoundaryValues<dim>::vector_value (const Point<dim>    &p,
+  void PowerBoundaryValues<dim>::vector_value (const Point<dim> &p,
                                                Vector<double>   &values) const
   {
-    Assert (values.size () == dim,
-            ExcDimensionMismatch (values.size (), dim));
-    Assert (dim > 2, ExcNotImplemented ());
+    Assert (values.size() == dim,
+            ExcDimensionMismatch (values.size(), dim));
+    Assert (dim > 2, ExcNotImplemented());
     
     //define system power incidence direction
     //spherical coordinate system
@@ -184,8 +183,8 @@ namespace Maxwell
     //    double var_t_pulse = 0;
     
     //define time dependent value
-    /*    if ( (this->get_time () <= 0.5)
-          var_t_pulse = std::sin (this->get_time () * 4 * numbers::PI);
+    /*    if ( (this->get_time() <= 0.5)
+          var_t_pulse = std::sin (this->get_time() * 4 * numbers::PI);
           else
           var_t_pulse = 0;
     */
@@ -215,9 +214,9 @@ namespace Maxwell
   void PowerBoundaryValues<dim>::vector_value_list (const std::vector<Point<dim>> &points,
                                                     std::vector<Vector<double>>   &value_list ) const
   {
-    Assert (value_list.size () == points.size (),
-            ExcDimensionMismatch (value_list.size (), points.size ()));
-    const unsigned int n_points = points.size ();
+    Assert (value_list.size() == points.size(),
+            ExcDimensionMismatch (value_list.size(), points.size()));
+    const unsigned int n_points = points.size();
     
     for (unsigned int p = 0; p<n_points; ++p)
       PowerBoundaryValues<dim>::vector_value (points[p], value_list[p]);
@@ -238,19 +237,19 @@ namespace Maxwell
 
   
   template <int dim>
-  void MaxwellTD<dim>::setup_system ()
+  void MaxwellTD<dim>::setup_system()
   {
     GridGenerator::hyper_cube (triangulation, -1, 1);
     triangulation.refine_global (4);
 
     std::cout << "Number of active cells: "
-              << triangulation.n_active_cells ()
+              << triangulation.n_active_cells()
               << std::endl;
 
     dof_handler.distribute_dofs (fe);
 
     std::cout << "Number of degrees of freedom: "
-              << dof_handler.n_dofs ()
+              << dof_handler.n_dofs()
               << std::endl
               << std::endl;
 
@@ -268,7 +267,7 @@ namespace Maxwell
     dsp.block(0,1).reinit (n_b, n_e);
     dsp.block(1,0).reinit (n_e, n_b);
     dsp.block(1,1).reinit (n_e, n_e);
-    dsp.collect_sizes ();
+    dsp.collect_sizes();
 
     DoFTools::make_sparsity_pattern (dof_handler, dsp);
     sparsity_pattern.copy_from (dsp);
@@ -285,28 +284,28 @@ namespace Maxwell
     solution.reinit (2);
     solution.block(0).reinit (n_b);
     solution.block(1).reinit (n_e);
-    solution.collect_sizes ();
+    solution.collect_sizes();
     
     old_solution.reinit (2);
     old_solution.block(0).reinit (n_b);
     old_solution.block(1).reinit (n_e);
-    old_solution.collect_sizes ();
+    old_solution.collect_sizes();
     
     system_rhs.reinit (2);
     system_rhs.block(0).reinit (n_b);
     system_rhs.block(1).reinit (n_e);
-    system_rhs.collect_sizes ();
+    system_rhs.collect_sizes();
     
     system_power.reinit (2);
     system_power.block(0).reinit (n_b);
     system_power.block(1).reinit (n_e);
-    system_power.collect_sizes ();
+    system_power.collect_sizes();
   }
 
 
   
   template <int dim>
-  void MaxwellTD<dim>::assemble_system ()
+  void MaxwellTD<dim>::assemble_system()
   {
     QGauss<dim>        quadrature_formula (degree+2);
     QGauss<dim-1>    face_quadrature_formula (degree+2);
@@ -320,8 +319,8 @@ namespace Maxwell
                                       update_quadrature_points | update_JxW_values);
     
     const unsigned int dofs_per_cell   = fe.dofs_per_cell;
-    const unsigned int n_q_points      = quadrature_formula.size ();
-    const unsigned int n_face_q_points = face_quadrature_formula.size ();
+    const unsigned int n_q_points      = quadrature_formula.size();
+    const unsigned int n_face_q_points = face_quadrature_formula.size();
     
     std::cout << "dofs_per_cell: " << dofs_per_cell << std::endl;
     std::cout << "n_q_points: " << n_q_points << std::endl;
@@ -352,8 +351,8 @@ namespace Maxwell
     const FEValuesExtractors::Vector E_field (dim);
     
     typename DoFHandler<dim>::active_cell_iterator
-      cell = dof_handler.begin_active (),
-      endc = dof_handler.end ();
+      cell = dof_handler.begin_active(),
+      endc = dof_handler.end();
     for (; cell != endc; ++cell)
       {
         fe_values.reinit (cell);
@@ -414,7 +413,7 @@ namespace Maxwell
               fe_face_values.reinit (cell, face_n);
               
               power_boundary_values.vector_value_list
-                (fe_face_values.get_quadrature_points (), boundary_values);
+                (fe_face_values.get_quadrature_points(), boundary_values);
               
               for (unsigned int q = 0; q<n_face_q_points; ++q)
                 {
@@ -467,15 +466,15 @@ namespace Maxwell
         
   // TODO: Consider applying non-trivial preconditioner to solve_b and solve_e //Kostya
   template <int dim>
-  void MaxwellTD<dim>::solve_b ()
+  void MaxwellTD<dim>::solve_b()
   {
-    SolverControl           solver_control (1000, 1e-12*system_rhs.l2_norm ());
+    SolverControl           solver_control (1000, 1e-12*system_rhs.l2_norm());
     SolverCG<>              cg (solver_control);
     
     cg.solve (sys_matrix_b.block(0, 0), solution.block(0), system_rhs.block(0),
-              PreconditionIdentity ());
+              PreconditionIdentity());
 
-    std::cout << "   u-equation: " << solver_control.last_step ()
+    std::cout << "   u-equation: " << solver_control.last_step()
               << " CG iterations."
               << std::endl;
   }
@@ -483,15 +482,15 @@ namespace Maxwell
   
 
   template <int dim>
-  void MaxwellTD<dim>::solve_e ()
+  void MaxwellTD<dim>::solve_e()
   {
-    SolverControl           solver_control (1000, 1e-12*system_rhs.l2_norm ());
+    SolverControl           solver_control (1000, 1e-12*system_rhs.l2_norm());
     SolverCG<>              cg (solver_control);
     
     cg.solve (sys_matrix_e.block(1, 1), solution.block(1), system_rhs.block(1),
-              PreconditionIdentity ());
+              PreconditionIdentity());
     
-    std::cout << "   v-equation: " << solver_control.last_step ()
+    std::cout << "   v-equation: " << solver_control.last_step()
               << " CG iterations."
               << std::endl;
   }
@@ -499,7 +498,7 @@ namespace Maxwell
 
 
   template <int dim>
-  void MaxwellTD<dim>::output_results () const
+  void MaxwellTD<dim>::output_results() const
   {
     DataOut<dim> data_out;
 
@@ -523,39 +522,39 @@ namespace Maxwell
         break;
         
       default:
-        Assert (false, ExcNotImplemented ());
+        Assert (false, ExcNotImplemented());
       }
 
     data_out.attach_dof_handler (dof_handler);
     data_out.add_data_vector (solution, solution_names);
 
-    data_out.build_patches ();
+    data_out.build_patches();
 
     std::ostringstream filename;
     filename << "solution-"
              <<    Utilities::int_to_string (timestep_number, 3)
              <<    ".vtk";
     
-    std::ofstream output (filename.str ().c_str ());
+    std::ofstream output (filename.str().c_str());
     data_out.write_vtk (output);
   }
 
   
 
   template <int dim>
-  void MaxwellTD<dim>::run ()
+  void MaxwellTD<dim>::run()
   {
-    setup_system ();
+    setup_system();
     std::cout << "setup system...ok! " << std::endl;
 
-    assemble_system ();
+    assemble_system();
     std::cout << "assembling...ok! " << std::endl;
 
     // (For additions, we need a temporary vector that we declare
     // before the loop to avoid repeated memory allocations in each
     // time step.)
-    Vector<double> tmp1 (system_rhs.block(0).size ());
-    Vector<double> tmp2 (system_rhs.block(1).size ());
+    Vector<double> tmp1 (system_rhs.block(0).size());
+    Vector<double> tmp2 (system_rhs.block(1).size());
 
     TimePulseFactor<dim> time_pulse_factor;
     Point<dim> p_time;
@@ -568,8 +567,8 @@ namespace Maxwell
                   << " at t = " << time
                   << std::endl;
         
-        std::cout << "____ " << old_solution.block(0).size () <<  std::endl
-            << ";;;;;;" << rhs_matrix_k_b.block(0, 0).m () << std::endl;
+        std::cout << "____ " << old_solution.block(0).size() <<  std::endl
+            << ";;;;;;" << rhs_matrix_k_b.block(0, 0).m() << std::endl;
         
         rhs_matrix_k_b.block(0, 1).vmult ( system_rhs.block(0), old_solution.block(1) );
         rhs_matrix_gp_b.block(0, 0).vmult ( tmp1, old_solution.block(0));
@@ -581,7 +580,7 @@ namespace Maxwell
         // values. As for the right hand side, this is a space-time function
         // evaluated at a particular time, which we interpolate at boundary
         // nodes and then use the result to apply boundary values as we
-        // usually do. The result is then handed off to the solve_u ()
+        // usually do. The result is then handed off to the solve_u()
         // function:
        
         /*{
@@ -602,7 +601,7 @@ namespace Maxwell
                                               system_rhs.block(0));
         }*/
         
-        solve_b ();
+        solve_b();
         
         time_pulse_factor.set_time (time);
         
@@ -630,9 +629,9 @@ namespace Maxwell
         //                                       system_rhs.block(1));
         // }
           
-        solve_e ();
+        solve_e();
         
-        output_results ();
+        output_results();
         old_solution = solution;
       }
   }
@@ -640,7 +639,7 @@ namespace Maxwell
 
 
 
-int main ()
+int main()
 {
   try
     {
@@ -648,7 +647,7 @@ int main ()
       using namespace Maxwell;
       
       MaxwellTD<3> wave_equation_solver (0);
-      wave_equation_solver.run ();
+      wave_equation_solver.run();
     }
   catch (std::exception &exc)
     {
@@ -656,7 +655,7 @@ int main ()
                 << "----------------------------------------------------"
                 << std::endl;
       std::cerr << "Exception on processing: " << std::endl
-                << exc.what () << std::endl
+                << exc.what() << std::endl
                 << "Aborting!" << std::endl
                 << "----------------------------------------------------"
                 << std::endl;
