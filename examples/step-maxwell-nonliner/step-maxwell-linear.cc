@@ -463,22 +463,9 @@ namespace Maxwell
     std::cout << "end of assembling..ok!" << std::endl;
   }        //end of assemble_system
 
+  
         
-
-  // @sect4{WaveEquation::solve_u and WaveEquation::solve_v}
-
-  // The next two functions deal with solving the linear systems associated
-  // with the equations for $U^n$ and $V^n$. Both are not particularly
-  // interesting as they pretty much follow the scheme used in all the
-  // previous tutorial programs.
-  //
-  // One can make little experiments with preconditioners for the two matrices
-  // we have to invert. As it turns out, however, for the matrices at hand
-  // here, using Jacobi or SSOR preconditioners reduces the number of
-  // iterations necessary to solve the linear system slightly, but due to the
-  // cost of applying the preconditioner it is no win in terms of run-time. It
-  // is not much of a loss either, but let's keep it simple and just do
-  // without:
+  // TODO: Consider applying non-trivial preconditioner to solve_b and solve_e //Kostya
   template <int dim>
   void MaxwellTD<dim>::solve_b ()
   {
@@ -511,13 +498,6 @@ namespace Maxwell
   
 
 
-  // @sect4{WaveEquation::output_results}
-
-  // Likewise, the following function is pretty much what we've done
-  // before. The only thing worth mentioning is how here we generate a string
-  // representation of the time step number padded with leading zeros to 3
-  // character length using the Utilities::int_to_string function's second
-  // argument.
   template <int dim>
   void MaxwellTD<dim>::output_results () const
   {
@@ -526,7 +506,7 @@ namespace Maxwell
     std::vector<std::string> solution_names;
     switch (dim)
       {
-      case 2:
+      case 2:  // TODO: It should be TM or TE case //Kostya
         solution_names.push_back ("Bx");
         solution_names.push_back ("By");
         solution_names.push_back ("Ex");
@@ -546,7 +526,6 @@ namespace Maxwell
         Assert (false, ExcNotImplemented ());
       }
 
-
     data_out.attach_dof_handler (dof_handler);
     data_out.add_data_vector (solution, solution_names);
 
@@ -563,55 +542,25 @@ namespace Maxwell
 
   
 
-  // @sect4{WaveEquation::run}
-
-  // The following is really the only interesting function of the program. It
-  // contains the loop over all time steps, but before we get to that we have
-  // to set up the grid, DoFHandler, and matrices. In addition, we have to
-  // somehow get started with initial values. To this end, we use the
-  // VectorTools::project function that takes an object that describes a
-  // continuous function and computes the $L^2$ projection of this function
-  // onto the finite element space described by the DoFHandler object. Can't
-  // be any simpler than that:
   template <int dim>
   void MaxwellTD<dim>::run ()
   {
     setup_system ();
-    
     std::cout << "setup system...ok! " << std::endl;
-    
-    assemble_system ();
 
+    assemble_system ();
     std::cout << "assembling...ok! " << std::endl;
 
-    /*
-      VectorTools::project (dof_handler, constraints, QGauss<dim> (3),
-      InitialValuesU<dim> (),
-      old_solution_u);
-      VectorTools::project (dof_handler, constraints, QGauss<dim> (3),
-      InitialValuesV<dim> (),
-      old_solution_v);
-    */
-    
-    // The next thing is to loop over all the time steps until we reach the
-    // end time ($T = 5$ in this case). In each time step, we first have to
-    // solve for $U^n$, using the equation $ (M^n + k^2\theta^2 A^n)U^n  = $
-    // $ (M^{n, n-1} - k^2\theta (1-\theta) A^{n, n-1})U^{n-1} + kM^{n, n-1}V^{n-1}
-    // +$ $k\theta \left[k \theta F^n + k (1-\theta) F^{n-1} \right]$. Note
-    // that we use the same mesh for all time steps, so that $M^n = M^{n, n-1} = M$
-    // and $A^n = A^{n, n-1} = A$. What we therefore have to do first is to add up
-    // $MU^{n-1} - k^2\theta (1-\theta) AU^{n-1} + kMV^{n-1}$ and the forcing
-    // terms, and put the result into the <code>system_rhs</code> vector. (For
-    // these additions, we need a temporary vector that we declare before the
-    // loop to avoid repeated memory allocations in each time step.)
-    //
+    // (For additions, we need a temporary vector that we declare
+    // before the loop to avoid repeated memory allocations in each
+    // time step.)
     Vector<double> tmp1 (system_rhs.block(0).size ());
     Vector<double> tmp2 (system_rhs.block(1).size ());
-    //    Vector<double> forcing_terms (solution_u.size ());
+
     TimePulseFactor<dim> time_pulse_factor;
     Point<dim> p_time;
     
-    for (timestep_number = 1, time = time_step;
+    for (time = time_step, timestep_number = 1;
          time <= 0.5;
          time += time_step, ++timestep_number)
       {
@@ -626,16 +575,6 @@ namespace Maxwell
         rhs_matrix_gp_b.block(0, 0).vmult ( tmp1, old_solution.block(0));
         system_rhs.block(0).add (1, tmp1);
         
-        /*
-          mt_G.vmult (system_rhs, old_solution_b);
-          
-          mt_P.vmult (tmp, old_solution_b);
-          system_rhs.add (-time_step/2, tmp);
-          
-          mt_K.vmult (tmp, old_solution_e);
-          system_rhs.add (-time_step, tmp);
-        */
-        
         
         // After so constructing the right hand side vector of the first
         // equation, all we have to do is apply the correct boundary
@@ -645,8 +584,7 @@ namespace Maxwell
         // usually do. The result is then handed off to the solve_u ()
         // function:
        
-        /*
-          {
+        /*{
           BoundaryValuesB<dim> boundary_values_b_function;
           boundary_values_b_function.set_time (time);
           
@@ -655,50 +593,16 @@ namespace Maxwell
                                                     0,
                                                     ZeroFunction<dim> (dim+dim),
                                                     boundary_values);
-
-          // The matrix for solve_u () is the same in every time steps, so one
-          // could think that it is enough to do this only once at the
-          // beginning of the simulation. However, since we need to apply
-          // boundary values to the linear system (which eliminate some matrix
-          // rows and columns and give contributions to the right hand side),
-          // we have to refill the matrix in every time steps before we
-          // actually apply boundary data. The actual content is very simple:
-          // it is the sum of the mass matrix and a weighted Laplace matrix:
-//          matrix_b.copy_from (mt_G);
-//          matrix_b.add (time_step/2.0, mt_P);
-//
-            
-std::cout << "boundary B...OK " << std::endl;
-
-
+                                                    
+          std::cout << "boundary B...OK " << std::endl;
 
           MatrixTools::apply_boundary_values (boundary_values,
                                               sys_matrix_b.block(0, 0),
                                               solution.block(0),
                                               system_rhs.block(0));
-        }
+        }*/
         
-*/        
         solve_b ();
-
-
-        // The second step, i.e. solving for $V^n$, works similarly, except
-        // that this time the matrix on the left is the mass matrix (which we
-        // copy again in order to be able to apply boundary conditions, and
-        // the right hand side is $MV^{n-1} - k\left[ \theta A U^n +
-        // (1-\theta) AU^{n-1}\right]$ plus forcing terms. %Boundary values
-        // are applied in the same way as before, except that now we have to
-        // use the BoundaryValuesV class:
-
-        /*
-          mt_C.vmult (system_rhs, old_solution_e);
-          
-          mt_S.vmult (tmp, old_solution_e);
-          system_rhs.add (-time_step/2, tmp);
-          
-          mt_Kt.vmult (tmp, solution_b);
-        system_rhs.add (time_step, tmp);
-        */
         
         time_pulse_factor.set_time (time);
         
@@ -709,48 +613,26 @@ std::cout << "boundary B...OK " << std::endl;
         system_rhs.block(1).add (time_pulse_factor.value (p_time, 0), system_power.block(1));
         
         //simply ignoring current J first
-    
-        
-        /*
 
-          {
-          BoundaryValuesE<dim> boundary_values_e_function;
-          boundary_values_e_function.set_time (time);
+        // {
+        //   BoundaryValuesE<dim> boundary_values_e_function;
+        //   boundary_values_e_function.set_time (time);
           
-          std::map<types::global_dof_index, double> boundary_values;
-          VectorTools::interpolate_boundary_values (dof_handler,
-          0,
-          boundary_values_e_function,
-          boundary_values);
+        //   std::map<types::global_dof_index, double> boundary_values;
+        //   VectorTools::interpolate_boundary_values (dof_handler,
+        //                                             0,
+        //                                             boundary_values_e_function,
+        //                                             boundary_values);
           
-          // matrix_e.copy_from (mt_C);
-          // matrix_e.add (time_step/2.0, mt_S);
-
-          MatrixTools::apply_boundary_values (boundary_values,
-          sys_matrix_e.block(1, 1),
-          solution.block(1),
-          system_rhs.block(1));
-          }
+        //   MatrixTools::apply_boundary_values (boundary_values,
+        //                                       sys_matrix_e.block(1, 1),
+        //                                       solution.block(1),
+        //                                       system_rhs.block(1));
+        // }
           
-        */
-        
         solve_e ();
         
-        // Finally, after both solution components have been computed, we
-        // output the result, compute the energy in the solution, and go on to
-        // the next time step after shifting the present solution into the
-        // vectors that hold the solution at the previous time step. Note the
-        // function SparseMatrix::matrix_norm_square that can compute
-        // $\left<V^n, MV^n\right>$ and $\left<U^n, AU^n\right>$ in one step,
-        // saving us the expense of a temporary vector and several lines of
-        // code:
         output_results ();
-        /*
-          std::cout << "   Total energy: "
-          << (mass_matrix.matrix_norm_square (solution_v) +
-          laplace_matrix.matrix_norm_square (solution_u)) / 2
-                  << std::endl;
-        */
         old_solution = solution;
       }
   }
@@ -758,10 +640,6 @@ std::cout << "boundary B...OK " << std::endl;
 
 
 
-// @sect3{The <code>main</code> function}
-
-// What remains is the main function of the program. There is nothing here
-// that hasn't been shown in several of the previous programs:
 int main ()
 {
   try
