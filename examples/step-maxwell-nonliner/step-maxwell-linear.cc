@@ -338,10 +338,10 @@ namespace Maxwell
       local_rhs_GP (dofs_per_cell, dofs_per_cell);
 
     FullMatrix<double>
-      local_matrix_e (dofs_per_cell, dofs_per_cell),
-      local_rhs_k_e  (dofs_per_cell, dofs_per_cell),
-      local_rhs_cs_e (dofs_per_cell, dofs_per_cell),
-      local_rhs_q_e  (dofs_per_cell, dofs_per_cell);
+      local_lhs_CS (dofs_per_cell, dofs_per_cell),
+      local_rhs_K  (dofs_per_cell, dofs_per_cell),
+      local_rhs_CS (dofs_per_cell, dofs_per_cell),
+      local_rhs_Q  (dofs_per_cell, dofs_per_cell);
 
     //define local power
     Vector<double>    local_power    (dofs_per_cell);
@@ -363,10 +363,10 @@ namespace Maxwell
         local_rhs_KT  = 0;
         local_rhs_GP = 0;
 
-        local_matrix_e = 0;
-        local_rhs_k_e  = 0;
-        local_rhs_cs_e = 0;
-        local_rhs_q_e  = 0;
+        local_lhs_CS = 0;
+        local_rhs_K  = 0;
+        local_rhs_CS = 0;
+        local_rhs_Q  = 0;
 
         local_power = 0;
 
@@ -396,18 +396,18 @@ namespace Maxwell
                   // G - delta_t/2 * P
                   local_rhs_GP (i, j) += F_i * F_j * fe_values.JxW (q)
                     * (1/mu_r - 1/mu_r * sigma_m * 1/mu_r * time_step/2);
-
-                  local_matrix_e (i, j) += W_i * W_j * fe_values.JxW (q)
+                  // C + delta_t/2 * S
+                  local_lhs_CS (i, j) += W_i * W_j * fe_values.JxW (q)
                     * (eps_r + time_step/2 * sigma_e);
-
-                  local_rhs_k_e (i, j) += curl_W_i * F_j * fe_values.JxW (q)
-                    * time_step * 1 / mu_r;
-
-                  local_rhs_cs_e (i, j) += W_i * W_j * fe_values.JxW (q)
+                  // delta_t * K
+                  local_rhs_K (i, j) += curl_W_i * F_j * fe_values.JxW (q)
+                    * time_step * 1/mu_r;
+                  // C - delta_t/2 * S
+                  local_rhs_CS (i, j) += W_i * W_j * fe_values.JxW (q)
                     * (eps_r - time_step/2 * sigma_e);
-
-                  local_rhs_q_e (i, j)  += F_i * W_j * fe_values.JxW (q)
-                    * -1 * time_step;
+                  // -delta_t * Q
+                  local_rhs_Q (i, j)  += F_i * W_j * fe_values.JxW (q)
+                    * -time_step;
                 }
             }
 
@@ -450,10 +450,10 @@ namespace Maxwell
                 rhs_matrix_k_b.add (dof_i, dof_j, local_rhs_KT (i, j));
                 rhs_matrix_gp_b.add (dof_i, dof_j, local_rhs_GP (i, j));
 
-                sys_matrix_e.add (dof_i, dof_j, local_matrix_e (i, j));
-                rhs_matrix_k_e.add (dof_i, dof_j, local_rhs_k_e (i, j));
-                rhs_matrix_cs_e.add (dof_i, dof_j, local_rhs_cs_e (i, j));
-                rhs_matrix_q_e.add (dof_i, dof_j, local_rhs_q_e (i, j));
+                sys_matrix_e.add (dof_i, dof_j, local_lhs_CS (i, j));
+                rhs_matrix_k_e.add (dof_i, dof_j, local_rhs_K (i, j));
+                rhs_matrix_cs_e.add (dof_i, dof_j, local_rhs_CS (i, j));
+                rhs_matrix_q_e.add (dof_i, dof_j, local_rhs_Q (i, j));
               }
           }
       }            //end of cells loop
