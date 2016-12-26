@@ -90,7 +90,7 @@ namespace Maxwell
 
 
     BlockSparsityPattern      sparsity_pattern;
-    
+
     //Defining matrixs with size of 2X2
     //G + delta_t/2 * P is actually sys_lhs_b.block(0,0)
     //sys_lhs_b is a system_matrix assembled from each cells, namely, local_matrix
@@ -98,7 +98,7 @@ namespace Maxwell
       rhs_matrix_k_b, rhs_matrix_gp_b;
     BlockSparseMatrix<double>    sys_matrix_e,
       rhs_matrix_k_e, rhs_matrix_cs_e, rhs_matrix_q_e;
-    
+
     BlockVector<double> solution;        //solution_b, solution_e
     BlockVector<double> old_solution;    //old_solu_b, old_solu_e
 
@@ -135,13 +135,13 @@ namespace Maxwell
   double TimePulseFactor<dim>::value (const Point<dim> &/*p*/, const unsigned int component) const
   {
     Assert (component == 0, ExcInternalError());
-    
+
     if (this->get_time() <= 0.5)
       return std::sin (this->get_time() * 4 * numbers::PI);
     else
       return 0;
   }
-  
+
 
 
   // Finally, the incident power as face integration over face boundaries
@@ -164,7 +164,7 @@ namespace Maxwell
     Assert (values.size() == dim,
             ExcDimensionMismatch (values.size(), dim));
     Assert (dim > 2, ExcNotImplemented());
-    
+
     //define system power incidence direction
     //spherical coordinate system
     //theta  is the angle of vector S with Sz
@@ -173,22 +173,22 @@ namespace Maxwell
     double incid_theta = 0;
     double incid_phi   = 0;
     double H_magnitude = 1;
-    
+
     double sin_theta = std::sin (incid_theta);
     double cos_theta = std::cos (incid_theta);
     double sin_phi   = std::sin (incid_phi);
     double cos_phi   = std::cos (incid_phi);
-    
+
     //    double Z_impendence = 1 * 376.7;
     //    double var_t_pulse = 0;
-    
+
     //define time dependent value
     /*    if ( (this->get_time() <= 0.5)
           var_t_pulse = std::sin (this->get_time() * 4 * numbers::PI);
           else
           var_t_pulse = 0;
     */
-    
+
     //define H vector, here assuming mu_r = 1
     if (p[2] >= 0.99)
       {
@@ -217,14 +217,14 @@ namespace Maxwell
     Assert (value_list.size() == points.size(),
             ExcDimensionMismatch (value_list.size(), points.size()));
     const unsigned int n_points = points.size();
-    
+
     for (unsigned int p = 0; p<n_points; ++p)
       PowerBoundaryValues<dim>::vector_value (points[p], value_list[p]);
   }
 
 
 
-  // Constructor 
+  // Constructor
   template <int dim>
   MaxwellTD<dim>::MaxwellTD (const unsigned int degree)
     :
@@ -233,9 +233,9 @@ namespace Maxwell
     dof_handler (triangulation),
     time_step (1./64)
   {}
-  
 
-  
+
+
   template <int dim>
   void MaxwellTD<dim>::setup_system()
   {
@@ -254,12 +254,12 @@ namespace Maxwell
               << std::endl;
 
     DoFRenumbering::component_wise (dof_handler);
-    
+
     std::vector<types::global_dof_index> dofs_per_comonent (dim+dim);
     DoFTools::count_dofs_per_component (dof_handler, dofs_per_comonent);
     const unsigned int n_b = dofs_per_comonent[0],
       n_e = dofs_per_comonent[dim];
-    
+
     std::cout << "n_b: " << n_b << std::endl << "n_e: " << n_e << std::endl;
 
     BlockDynamicSparsityPattern dsp (2, 2);
@@ -285,17 +285,17 @@ namespace Maxwell
     solution.block(0).reinit (n_b);
     solution.block(1).reinit (n_e);
     solution.collect_sizes();
-    
+
     old_solution.reinit (2);
     old_solution.block(0).reinit (n_b);
     old_solution.block(1).reinit (n_e);
     old_solution.collect_sizes();
-    
+
     system_rhs.reinit (2);
     system_rhs.block(0).reinit (n_b);
     system_rhs.block(1).reinit (n_e);
     system_rhs.collect_sizes();
-    
+
     system_power.reinit (2);
     system_power.block(0).reinit (n_b);
     system_power.block(1).reinit (n_e);
@@ -303,40 +303,40 @@ namespace Maxwell
   }
 
 
-  
+
   template <int dim>
   void MaxwellTD<dim>::assemble_system()
   {
     QGauss<dim>        quadrature_formula (degree+2);
     QGauss<dim-1>    face_quadrature_formula (degree+2);
-    
+
     FEValues<dim> fe_values (fe, quadrature_formula,
                             update_values | update_gradients |
                             update_quadrature_points | update_JxW_values);
-    
+
     FEFaceValues<dim> fe_face_values (fe, face_quadrature_formula,
                                       update_values | update_normal_vectors |
                                       update_quadrature_points | update_JxW_values);
-    
+
     const unsigned int dofs_per_cell   = fe.dofs_per_cell;
     const unsigned int n_q_points      = quadrature_formula.size();
     const unsigned int n_face_q_points = face_quadrature_formula.size();
-    
+
     std::cout << "dofs_per_cell: " << dofs_per_cell << std::endl;
     std::cout << "n_q_points: " << n_q_points << std::endl;
     std::cout << "n_face_q_points: " << n_face_q_points << std::endl;
-    
+
     std::vector<types::global_dof_index> local_dof_indices (dofs_per_cell);
 
     PowerBoundaryValues<dim>    power_boundary_values;
-    
+
     std::vector<Vector<double>> boundary_values (n_face_q_points, Vector<double> (dim));
 
     FullMatrix<double>
-      local_lhs_b (dofs_per_cell, dofs_per_cell),
+      local_lhs_b    (dofs_per_cell, dofs_per_cell),
       local_rhs_k_b  (dofs_per_cell, dofs_per_cell),
       local_rhs_gp_b (dofs_per_cell, dofs_per_cell);
-    
+
     FullMatrix<double>
       local_matrix_e (dofs_per_cell, dofs_per_cell),
       local_rhs_k_e  (dofs_per_cell, dofs_per_cell),
@@ -346,28 +346,28 @@ namespace Maxwell
     //define local power
     Vector<double>    local_power    (dofs_per_cell);
     Tensor<1, dim>   power_rhs_H;
-    
+
     const FEValuesExtractors::Vector B_field (0);
     const FEValuesExtractors::Vector E_field (dim);
-    
+
     typename DoFHandler<dim>::active_cell_iterator
       cell = dof_handler.begin_active(),
       endc = dof_handler.end();
     for (; cell != endc; ++cell)
       {
         fe_values.reinit (cell);
-        
+
         local_lhs_b = 0;
         local_rhs_k_b  = 0;
         local_rhs_gp_b = 0;
-    
+
         local_matrix_e = 0;
         local_rhs_k_e  = 0;
         local_rhs_cs_e = 0;
         local_rhs_q_e  = 0;
-        
+
         local_power = 0;
-        
+
         // std::cout << "in cells..assembling.." << std::endl;
         for (unsigned int q = 0; q<n_q_points; ++q)
           for (unsigned int i = 0; i<dofs_per_cell; ++i)
@@ -375,7 +375,7 @@ namespace Maxwell
               const auto &Fb_i      = fe_values[B_field].value (i, q);
               const auto &curl_phi_i_E = fe_values[E_field].curl  (i, q);
               const auto &phi_i_E      = fe_values[E_field].value (i, q);
-              
+
               for (unsigned int j = 0; j<dofs_per_cell; ++j)
                 {
                   const auto &Fb_j      = fe_values[B_field].value (j, q);
@@ -384,24 +384,24 @@ namespace Maxwell
                   // G + delta_t/2 * P
                   local_lhs_b (i, j) += Fb_i * Fb_j * fe_values.JxW (q)
                     * (1/mu_r + 1/mu_r * sigma_m * 1/mu_r * time_step/2);
-                  
+
                   local_rhs_k_b (i, j) += -1 * time_step * 1 / mu_r
                     * curl_phi_j_E * Fb_i * fe_values.JxW (q);
-                  
+
                   local_rhs_gp_b (i, j) += Fb_i * Fb_j * fe_values.JxW (q)
                     * (1/mu_r - 1/mu_r/mu_r*sigma_m*time_step);
-                  
+
                   local_matrix_e (i, j) += phi_i_E * phi_j_E * fe_values.JxW (q)
                     * (eps_r + time_step/2 * sigma_e);
-                  
+
                   local_rhs_k_e (i, j) += time_step * 1 / mu_r
                     * curl_phi_i_E * Fb_j * fe_values.JxW (q);
-                  
+
                   local_rhs_cs_e (i, j) += phi_i_E * phi_j_E * fe_values.JxW (q)
                     * (eps_r - time_step/2 * sigma_e);
-                  
+
                   local_rhs_q_e (i, j)  += -1 * time_step
-                    * Fb_i * phi_j_E * fe_values.JxW (q); 
+                    * Fb_i * phi_j_E * fe_values.JxW (q);
                 }
             }
 
@@ -409,10 +409,10 @@ namespace Maxwell
           if (cell->at_boundary (face_n))
             {
               fe_face_values.reinit (cell, face_n);
-              
+
               power_boundary_values.vector_value_list
                 (fe_face_values.get_quadrature_points(), boundary_values);
-              
+
               for (unsigned int q = 0; q<n_face_q_points; ++q)
                 {
                   power_rhs_H[0] = boundary_values[q] (0);
@@ -422,7 +422,7 @@ namespace Maxwell
                     std::cout << "power_rhs_H: " << power_rhs_H  << std::endl;
                     std::cout << "cross_values..."  << cross_product_3d (power_rhs_H, fe_face_values[E_field].value (4, q)) * fe_face_values.normal_vector (q) * fe_face_values.JxW (q) << std::endl;
                   */
-                  
+
                   for (unsigned int i = 0; i<dofs_per_cell; ++i)
                     local_power (i) += cross_product_3d (power_rhs_H,
                       fe_face_values[E_field].value (i, q))
@@ -431,7 +431,7 @@ namespace Maxwell
                 }
             }
         //        std::cout << "local function..assembling..ok!" << std::endl;
-        
+
         cell->get_dof_indices (local_dof_indices);
         for (unsigned int i = 0; i<dofs_per_cell; ++i)
           {
@@ -443,7 +443,7 @@ namespace Maxwell
                 sys_lhs_b.add (dof_i, dof_j, local_lhs_b (i, j));
                 rhs_matrix_k_b.add (dof_i, dof_j, local_rhs_k_b (i, j));
                 rhs_matrix_gp_b.add (dof_i, dof_j, local_rhs_gp_b (i, j));
-                
+
                 sys_matrix_e.add (dof_i, dof_j, local_matrix_e (i, j));
                 rhs_matrix_k_e.add (dof_i, dof_j, local_rhs_k_e (i, j));
                 rhs_matrix_cs_e.add (dof_i, dof_j, local_rhs_cs_e (i, j));
@@ -451,19 +451,19 @@ namespace Maxwell
               }
           }
       }            //end of cells loop
-    
+
     std::cout << "end of assembling..ok!" << std::endl;
   }        //end of assemble_system
 
-  
-        
+
+
   // TODO: Consider applying non-trivial preconditioner to solve_b and solve_e //Kostya
   template <int dim>
   void MaxwellTD<dim>::solve_b()
   {
     SolverControl           solver_control (1000, 1e-12*system_rhs.l2_norm());
     SolverCG<>              cg (solver_control);
-    
+
     cg.solve (sys_lhs_b.block(0,0), solution.block(0), system_rhs.block(0),
               PreconditionIdentity());
 
@@ -472,22 +472,22 @@ namespace Maxwell
               << std::endl;
   }
 
-  
+
 
   template <int dim>
   void MaxwellTD<dim>::solve_e()
   {
     SolverControl           solver_control (1000, 1e-12*system_rhs.l2_norm());
     SolverCG<>              cg (solver_control);
-    
+
     cg.solve (sys_matrix_e.block(1,1), solution.block(1), system_rhs.block(1),
               PreconditionIdentity());
-    
+
     std::cout << "   v-equation: " << solver_control.last_step()
               << " CG iterations."
               << std::endl;
   }
-  
+
 
 
   template <int dim>
@@ -513,7 +513,7 @@ namespace Maxwell
         solution_names.push_back ("Ey");
         solution_names.push_back ("Ez");
         break;
-        
+
       default:
         Assert (false, ExcNotImplemented());
       }
@@ -527,12 +527,12 @@ namespace Maxwell
     filename << "solution-"
              <<    Utilities::int_to_string (timestep_number, 3)
              <<    ".vtk";
-    
+
     std::ofstream output (filename.str().c_str());
     data_out.write_vtk (output);
   }
 
-  
+
 
   template <int dim>
   void MaxwellTD<dim>::run()
@@ -551,7 +551,7 @@ namespace Maxwell
 
     TimePulseFactor<dim> time_pulse_factor;
     Point<dim> p_time;
-    
+
     for (time = time_step, timestep_number = 1;
          time <= 2.5;
          time += time_step, ++timestep_number)
@@ -559,14 +559,14 @@ namespace Maxwell
         std::cout << "Time step " << timestep_number
                   << " at t = " << time
                   << std::endl;
-        
+
         std::cout << "____ " << old_solution.block(0).size() <<  std::endl
             << ";;;;;;" << rhs_matrix_k_b.block(0, 0).m() << std::endl;
-        
+
         rhs_matrix_k_b.block(0,1).vmult ( system_rhs.block(0), old_solution.block(1) );
         rhs_matrix_gp_b.block(0,0).vmult ( tmp1, old_solution.block(0));
         system_rhs.block(0).add (1, tmp1);
-        
+
         // After so constructing the right hand side vector of the first
         // equation, all we have to do is apply the correct boundary
         // values. As for the right hand side, this is a space-time function
@@ -574,17 +574,17 @@ namespace Maxwell
         // nodes and then use the result to apply boundary values as we
         // usually do. The result is then handed off to the solve_u()
         // function:
-       
+
         /*{
           BoundaryValuesB<dim> boundary_values_b_function;
           boundary_values_b_function.set_time (time);
-          
+
           std::map<types::global_dof_index, double> boundary_values;
           VectorTools::interpolate_boundary_values (dof_handler,
                                                     0,
                                                     ZeroFunction<dim> (dim+dim),
                                                     boundary_values);
-                                                    
+
           std::cout << "boundary B...OK " << std::endl;
 
           MatrixTools::apply_boundary_values (boundary_values,
@@ -592,37 +592,37 @@ namespace Maxwell
                                               solution.block(0),
                                               system_rhs.block(0));
         }*/
-        
+
         solve_b();
-        
+
         time_pulse_factor.set_time (time);
-        
+
         rhs_matrix_k_e.block(1,0).vmult (system_rhs.block(1), solution.block(0));
         rhs_matrix_cs_e.block(1,1).vmult (tmp2, old_solution.block(1));
-        
+
         system_rhs.block(1).add (1, tmp2);
         system_rhs.block(1).add (time_pulse_factor.value (p_time, 0), system_power.block(1));
-        
+
         //simply ignoring current J first
 
         // {
         //   BoundaryValuesE<dim> boundary_values_e_function;
         //   boundary_values_e_function.set_time (time);
-          
+
         //   std::map<types::global_dof_index, double> boundary_values;
         //   VectorTools::interpolate_boundary_values (dof_handler,
         //                                             0,
         //                                             boundary_values_e_function,
         //                                             boundary_values);
-          
+
         //   MatrixTools::apply_boundary_values (boundary_values,
         //                                       sys_matrix_e.block(1,1),
         //                                       solution.block(1),
         //                                       system_rhs.block(1));
         // }
-          
+
         solve_e();
-        
+
         output_results();
         old_solution = solution;
       }
@@ -637,7 +637,7 @@ int main()
     {
       using namespace dealii;
       using namespace Maxwell;
-      
+
       MaxwellTD<3> wave_equation_solver (0);
       wave_equation_solver.run();
     }
