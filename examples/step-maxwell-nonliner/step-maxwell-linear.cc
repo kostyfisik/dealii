@@ -372,36 +372,36 @@ namespace Maxwell
         for (unsigned int q = 0; q<n_q_points; ++q)
           for (unsigned int i = 0; i<dofs_per_cell; ++i)
             {
-              const Tensor<1, dim> phi_i_B      = fe_values[B_field].value (i, q);
-              const Tensor<1, dim> curl_phi_i_E = fe_values[E_field].curl  (i, q);
-              const Tensor<1, dim> phi_i_E      = fe_values[E_field].value (i, q);
+              const auto &Fb_i      = fe_values[B_field].value (i, q);
+              const auto &curl_phi_i_E = fe_values[E_field].curl  (i, q);
+              const auto &phi_i_E      = fe_values[E_field].value (i, q);
               
               for (unsigned int j = 0; j<dofs_per_cell; ++j)
                 {
-                  const Tensor<1, dim> phi_j_B      = fe_values[B_field].value (j, q);
-                  const Tensor<1, dim> curl_phi_j_E = fe_values[E_field].curl  (j, q);
-                  const Tensor<1, dim> phi_j_E      = fe_values[E_field].value (j, q);
-                  
-                  local_lhs_b (i, j) += phi_i_B * phi_j_B * fe_values.JxW (q)
-                    * (1/mu_r + 1/mu_r/mu_r * sigma_m * time_step);
+                  const auto &Fb_j      = fe_values[B_field].value (j, q);
+                  const auto &curl_phi_j_E = fe_values[E_field].curl  (j, q);
+                  const auto &phi_j_E      = fe_values[E_field].value (j, q);
+                  // G + delta_t/2 * P
+                  local_lhs_b (i, j) += Fb_i * Fb_j * fe_values.JxW (q)
+                    * (1/mu_r + 1/mu_r * sigma_m * 1/mu_r * time_step/2);
                   
                   local_rhs_k_b (i, j) += -1 * time_step * 1 / mu_r
-                    * curl_phi_j_E * phi_i_B * fe_values.JxW (q);
+                    * curl_phi_j_E * Fb_i * fe_values.JxW (q);
                   
-                  local_rhs_gp_b (i, j) += phi_i_B * phi_j_B * fe_values.JxW (q)
+                  local_rhs_gp_b (i, j) += Fb_i * Fb_j * fe_values.JxW (q)
                     * (1/mu_r - 1/mu_r/mu_r*sigma_m*time_step);
                   
                   local_matrix_e (i, j) += phi_i_E * phi_j_E * fe_values.JxW (q)
                     * (eps_r + time_step/2 * sigma_e);
                   
                   local_rhs_k_e (i, j) += time_step * 1 / mu_r
-                    * curl_phi_i_E * phi_j_B * fe_values.JxW (q);
+                    * curl_phi_i_E * Fb_j * fe_values.JxW (q);
                   
                   local_rhs_cs_e (i, j) += phi_i_E * phi_j_E * fe_values.JxW (q)
                     * (eps_r - time_step/2 * sigma_e);
                   
                   local_rhs_q_e (i, j)  += -1 * time_step
-                    * phi_i_B * phi_j_E * fe_values.JxW (q);                  
+                    * Fb_i * phi_j_E * fe_values.JxW (q); 
                 }
             }
 
