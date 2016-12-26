@@ -92,9 +92,9 @@ namespace Maxwell
     BlockSparsityPattern      sparsity_pattern;
     
     //Defining matrixs with size of 2X2
-    //G + delta_t/2 * P is actually sys_matrix_b.block(0,0)
-    //sys_matrix_b is a system_matrix assembled from each cells, namely, local_matrix
-    BlockSparseMatrix<double>    sys_matrix_b,
+    //G + delta_t/2 * P is actually sys_lhs_b.block(0,0)
+    //sys_lhs_b is a system_matrix assembled from each cells, namely, local_matrix
+    BlockSparseMatrix<double>    sys_lhs_b,
       rhs_matrix_k_b, rhs_matrix_gp_b;
     BlockSparseMatrix<double>    sys_matrix_e,
       rhs_matrix_k_e, rhs_matrix_cs_e, rhs_matrix_q_e;
@@ -272,7 +272,7 @@ namespace Maxwell
     DoFTools::make_sparsity_pattern (dof_handler, dsp);
     sparsity_pattern.copy_from (dsp);
 
-    sys_matrix_b.reinit (sparsity_pattern);
+    sys_lhs_b.reinit (sparsity_pattern);
     rhs_matrix_k_b.reinit (sparsity_pattern);
     rhs_matrix_gp_b.reinit (sparsity_pattern);
 
@@ -333,7 +333,7 @@ namespace Maxwell
     std::vector<Vector<double>> boundary_values (n_face_q_points, Vector<double> (dim));
 
     FullMatrix<double>
-      local_matrix_b (dofs_per_cell, dofs_per_cell),
+      local_lhs_b (dofs_per_cell, dofs_per_cell),
       local_rhs_k_b  (dofs_per_cell, dofs_per_cell),
       local_rhs_gp_b (dofs_per_cell, dofs_per_cell);
     
@@ -357,7 +357,7 @@ namespace Maxwell
       {
         fe_values.reinit (cell);
         
-        local_matrix_b = 0;
+        local_lhs_b = 0;
         local_rhs_k_b  = 0;
         local_rhs_gp_b = 0;
     
@@ -368,8 +368,7 @@ namespace Maxwell
         
         local_power = 0;
         
-        //        std::cout << "in cells..assembling.." << std::endl;
-        
+        // std::cout << "in cells..assembling.." << std::endl;
         for (unsigned int q = 0; q<n_q_points; ++q)
           for (unsigned int i = 0; i<dofs_per_cell; ++i)
             {
@@ -377,14 +376,13 @@ namespace Maxwell
               const Tensor<1, dim> curl_phi_i_E = fe_values[E_field].curl  (i, q);
               const Tensor<1, dim> phi_i_E      = fe_values[E_field].value (i, q);
               
-              
               for (unsigned int j = 0; j<dofs_per_cell; ++j)
                 {
                   const Tensor<1, dim> phi_j_B      = fe_values[B_field].value (j, q);
                   const Tensor<1, dim> curl_phi_j_E = fe_values[E_field].curl  (j, q);
                   const Tensor<1, dim> phi_j_E      = fe_values[E_field].value (j, q);
                   
-                  local_matrix_b (i, j) += phi_i_B * phi_j_B * fe_values.JxW (q)
+                  local_lhs_b (i, j) += phi_i_B * phi_j_B * fe_values.JxW (q)
                     * (1/mu_r + 1/mu_r/mu_r * sigma_m * time_step);
                   
                   local_rhs_k_b (i, j) += -1 * time_step * 1 / mu_r
@@ -436,27 +434,22 @@ namespace Maxwell
         
         cell->get_dof_indices (local_dof_indices);
         for (unsigned int i = 0; i<dofs_per_cell; ++i)
-          for (unsigned int j = 0; j<dofs_per_cell; ++j)
-            {
-              sys_matrix_b.add (local_dof_indices[i], local_dof_indices[j],
-                                local_matrix_b (i, j));
-              rhs_matrix_k_b.add (local_dof_indices[i], local_dof_indices[j],
-                                  local_rhs_k_b (i, j));
-              rhs_matrix_gp_b.add (local_dof_indices[i], local_dof_indices[j],
-                                   local_rhs_gp_b (i, j));
-              
-              sys_matrix_e.add (local_dof_indices[i], local_dof_indices[j],
-                                local_matrix_e (i, j));
-              rhs_matrix_k_e.add (local_dof_indices[i], local_dof_indices[j],
-                                  local_rhs_k_e (i, j));
-              rhs_matrix_cs_e.add (local_dof_indices[i], local_dof_indices[j],
-                                   local_rhs_cs_e (i, j));
-              rhs_matrix_q_e.add (local_dof_indices[i], local_dof_indices[j],
-                                  local_rhs_q_e (i, j));
-            }
-        
-        for (unsigned int i = 0; i<dofs_per_cell; ++i)
-          system_power (local_dof_indices[i]) += local_power (i);
+          {
+            const auto &dof_i = local_dof_indices[i];
+            system_power (dof_i) += local_power (i);
+            for (unsigned int j = 0; j<dofs_per_cell; ++j)
+              {
+                const auto &dof_j = local_dof_indices[j];
+                sys_lhs_b.add (dof_i, dof_j, local_lhs_b (i, j));
+                rhs_matrix_k_b.add (dof_i, dof_j, local_rhs_k_b (i, j));
+                rhs_matrix_gp_b.add (dof_i, dof_j, local_rhs_gp_b (i, j));
+                
+                sys_matrix_e.add (dof_i, dof_j, local_matrix_e (i, j));
+                rhs_matrix_k_e.add (dof_i, dof_j, local_rhs_k_e (i, j));
+                rhs_matrix_cs_e.add (dof_i, dof_j, local_rhs_cs_e (i, j));
+                rhs_matrix_q_e.add (dof_i, dof_j, local_rhs_q_e (i, j));
+              }
+          }
       }            //end of cells loop
     
     std::cout << "end of assembling..ok!" << std::endl;
@@ -471,7 +464,7 @@ namespace Maxwell
     SolverControl           solver_control (1000, 1e-12*system_rhs.l2_norm());
     SolverCG<>              cg (solver_control);
     
-    cg.solve (sys_matrix_b.block(0,0), solution.block(0), system_rhs.block(0),
+    cg.solve (sys_lhs_b.block(0,0), solution.block(0), system_rhs.block(0),
               PreconditionIdentity());
 
     std::cout << "   u-equation: " << solver_control.last_step()
@@ -560,7 +553,7 @@ namespace Maxwell
     Point<dim> p_time;
     
     for (time = time_step, timestep_number = 1;
-         time <= 0.5;
+         time <= 2.5;
          time += time_step, ++timestep_number)
       {
         std::cout << "Time step " << timestep_number
@@ -573,7 +566,6 @@ namespace Maxwell
         rhs_matrix_k_b.block(0,1).vmult ( system_rhs.block(0), old_solution.block(1) );
         rhs_matrix_gp_b.block(0,0).vmult ( tmp1, old_solution.block(0));
         system_rhs.block(0).add (1, tmp1);
-        
         
         // After so constructing the right hand side vector of the first
         // equation, all we have to do is apply the correct boundary
@@ -596,7 +588,7 @@ namespace Maxwell
           std::cout << "boundary B...OK " << std::endl;
 
           MatrixTools::apply_boundary_values (boundary_values,
-                                              sys_matrix_b.block(0,0),
+                                              sys_lhs_b.block(0,0),
                                               solution.block(0),
                                               system_rhs.block(0));
         }*/
