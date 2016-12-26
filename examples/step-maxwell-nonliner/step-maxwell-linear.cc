@@ -92,9 +92,9 @@ namespace Maxwell
     BlockSparsityPattern      sparsity_pattern;
 
     //Defining matrixs with size of 2X2
-    //G + delta_t/2 * P is actually sys_lhs_b.block(0,0)
-    //sys_lhs_b is a system_matrix assembled from each cells, namely, local_matrix
-    BlockSparseMatrix<double>    sys_lhs_b,
+    //G + delta_t/2 * P is actually lhs_GP.block(0,0)
+    //lhs_GP is a system_matrix assembled from each cells, namely, local_matrix
+    BlockSparseMatrix<double>    lhs_GP,
       rhs_matrix_k_b, rhs_matrix_gp_b;
     BlockSparseMatrix<double>    sys_matrix_e,
       rhs_matrix_k_e, rhs_matrix_cs_e, rhs_matrix_q_e;
@@ -272,7 +272,7 @@ namespace Maxwell
     DoFTools::make_sparsity_pattern (dof_handler, dsp);
     sparsity_pattern.copy_from (dsp);
 
-    sys_lhs_b.reinit (sparsity_pattern);
+    lhs_GP.reinit (sparsity_pattern);
     rhs_matrix_k_b.reinit (sparsity_pattern);
     rhs_matrix_gp_b.reinit (sparsity_pattern);
 
@@ -333,9 +333,9 @@ namespace Maxwell
     std::vector<Vector<double>> boundary_values (n_face_q_points, Vector<double> (dim));
 
     FullMatrix<double>
-      local_lhs_b    (dofs_per_cell, dofs_per_cell),
-      local_rhs_k_b  (dofs_per_cell, dofs_per_cell),
-      local_rhs_gp_b (dofs_per_cell, dofs_per_cell);
+      local_lhs_GP    (dofs_per_cell, dofs_per_cell),
+      local_rhs_KT  (dofs_per_cell, dofs_per_cell),
+      local_rhs_GP (dofs_per_cell, dofs_per_cell);
 
     FullMatrix<double>
       local_matrix_e (dofs_per_cell, dofs_per_cell),
@@ -347,6 +347,8 @@ namespace Maxwell
     Vector<double>    local_power    (dofs_per_cell);
     Tensor<1, dim>   power_rhs_H;
 
+    // corresponds to constructor`s
+    //     fe (FE_RaviartThomas<dim> (degree), 1, FE_Nedelec<dim> (degree), 1),
     const FEValuesExtractors::Vector B_field (0);
     const FEValuesExtractors::Vector E_field (dim);
 
@@ -357,9 +359,9 @@ namespace Maxwell
       {
         fe_values.reinit (cell);
 
-        local_lhs_b = 0;
-        local_rhs_k_b  = 0;
-        local_rhs_gp_b = 0;
+        local_lhs_GP = 0;
+        local_rhs_KT  = 0;
+        local_rhs_GP = 0;
 
         local_matrix_e = 0;
         local_rhs_k_e  = 0;
@@ -369,39 +371,43 @@ namespace Maxwell
         local_power = 0;
 
         // std::cout << "in cells..assembling.." << std::endl;
+        
+        // Using notations from paper by Rodrigue and White, 2001
+        // W - H(curl) edge elements for electric field
+        // F - H(div) face elements for magnetic field
         for (unsigned int q = 0; q<n_q_points; ++q)
           for (unsigned int i = 0; i<dofs_per_cell; ++i)
             {
-              const auto &Fb_i      = fe_values[B_field].value (i, q);
-              const auto &curl_phi_i_E = fe_values[E_field].curl  (i, q);
-              const auto &phi_i_E      = fe_values[E_field].value (i, q);
+              const auto &F_i      = fe_values[B_field].value (i, q);
+              const auto &curl_W_i = fe_values[E_field].curl  (i, q);
+              const auto &W_i      = fe_values[E_field].value (i, q);
 
               for (unsigned int j = 0; j<dofs_per_cell; ++j)
                 {
-                  const auto &Fb_j      = fe_values[B_field].value (j, q);
-                  const auto &curl_phi_j_E = fe_values[E_field].curl  (j, q);
-                  const auto &phi_j_E      = fe_values[E_field].value (j, q);
+                  const auto &F_j      = fe_values[B_field].value (j, q);
+                  const auto &curl_W_j = fe_values[E_field].curl  (j, q);
+                  const auto &W_j      = fe_values[E_field].value (j, q);
                   // G + delta_t/2 * P
-                  local_lhs_b (i, j) += Fb_i * Fb_j * fe_values.JxW (q)
+                  local_lhs_GP (i, j) += F_i * F_j * fe_values.JxW (q)
                     * (1/mu_r + 1/mu_r * sigma_m * 1/mu_r * time_step/2);
+                  // -delta_t * K^{T}
+                  local_rhs_KT (i, j) += curl_W_j * F_i * fe_values.JxW (q)
+                    * -time_step / mu_r;
+                  // G - delta_t/2 * P
+                  local_rhs_GP (i, j) += F_i * F_j * fe_values.JxW (q)
+                    * (1/mu_r - 1/mu_r * sigma_m * 1/mu_r * time_step/2);
 
-                  local_rhs_k_b (i, j) += -1 * time_step * 1 / mu_r
-                    * curl_phi_j_E * Fb_i * fe_values.JxW (q);
-
-                  local_rhs_gp_b (i, j) += Fb_i * Fb_j * fe_values.JxW (q)
-                    * (1/mu_r - 1/mu_r/mu_r*sigma_m*time_step);
-
-                  local_matrix_e (i, j) += phi_i_E * phi_j_E * fe_values.JxW (q)
+                  local_matrix_e (i, j) += W_i * W_j * fe_values.JxW (q)
                     * (eps_r + time_step/2 * sigma_e);
 
-                  local_rhs_k_e (i, j) += time_step * 1 / mu_r
-                    * curl_phi_i_E * Fb_j * fe_values.JxW (q);
+                  local_rhs_k_e (i, j) += curl_W_i * F_j * fe_values.JxW (q)
+                    * time_step * 1 / mu_r;
 
-                  local_rhs_cs_e (i, j) += phi_i_E * phi_j_E * fe_values.JxW (q)
+                  local_rhs_cs_e (i, j) += W_i * W_j * fe_values.JxW (q)
                     * (eps_r - time_step/2 * sigma_e);
 
-                  local_rhs_q_e (i, j)  += -1 * time_step
-                    * Fb_i * phi_j_E * fe_values.JxW (q);
+                  local_rhs_q_e (i, j)  += F_i * W_j * fe_values.JxW (q)
+                    * -1 * time_step;
                 }
             }
 
@@ -440,9 +446,9 @@ namespace Maxwell
             for (unsigned int j = 0; j<dofs_per_cell; ++j)
               {
                 const auto &dof_j = local_dof_indices[j];
-                sys_lhs_b.add (dof_i, dof_j, local_lhs_b (i, j));
-                rhs_matrix_k_b.add (dof_i, dof_j, local_rhs_k_b (i, j));
-                rhs_matrix_gp_b.add (dof_i, dof_j, local_rhs_gp_b (i, j));
+                lhs_GP.add (dof_i, dof_j, local_lhs_GP (i, j));
+                rhs_matrix_k_b.add (dof_i, dof_j, local_rhs_KT (i, j));
+                rhs_matrix_gp_b.add (dof_i, dof_j, local_rhs_GP (i, j));
 
                 sys_matrix_e.add (dof_i, dof_j, local_matrix_e (i, j));
                 rhs_matrix_k_e.add (dof_i, dof_j, local_rhs_k_e (i, j));
@@ -464,7 +470,7 @@ namespace Maxwell
     SolverControl           solver_control (1000, 1e-12*system_rhs.l2_norm());
     SolverCG<>              cg (solver_control);
 
-    cg.solve (sys_lhs_b.block(0,0), solution.block(0), system_rhs.block(0),
+    cg.solve (lhs_GP.block(0,0), solution.block(0), system_rhs.block(0),
               PreconditionIdentity());
 
     std::cout << "   u-equation: " << solver_control.last_step()
@@ -588,7 +594,7 @@ namespace Maxwell
           std::cout << "boundary B...OK " << std::endl;
 
           MatrixTools::apply_boundary_values (boundary_values,
-                                              sys_lhs_b.block(0,0),
+                                              lhs_GP.block(0,0),
                                               solution.block(0),
                                               system_rhs.block(0));
         }*/
