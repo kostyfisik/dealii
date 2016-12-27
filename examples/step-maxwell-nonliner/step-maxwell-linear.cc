@@ -463,7 +463,8 @@ namespace Maxwell
 
 
 
-  // TODO: Consider applying non-trivial preconditioner to solve_b and solve_e //Kostya
+  // TODO: Consider applying non-trivial preconditioner to solve_b and solve_e
+  // e.g. see step-20 precodition_Jacobi //Kostya
   template <int dim>
   void MaxwellTD<dim>::solve_b()
   {
@@ -569,6 +570,7 @@ namespace Maxwell
         std::cout << "____ " << old_solution.block(0).size() <<  std::endl
             << ";;;;;;" << rhs_matrix_k_b.block(0, 0).m() << std::endl;
 
+        // KT*e_old + gp*b_old
         rhs_matrix_k_b.block(0,1).vmult ( system_rhs.block(0), old_solution.block(1) );
         rhs_matrix_gp_b.block(0,0).vmult ( tmp1, old_solution.block(0));
         system_rhs.block(0).add (1, tmp1);
